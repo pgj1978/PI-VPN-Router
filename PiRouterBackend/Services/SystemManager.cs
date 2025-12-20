@@ -90,7 +90,7 @@ public class SystemManager : ISystemManager
             }
 
             // Reload dnsmasq
-            var (success, output) = await _processRunner.RunCommandAsync(new[] { "systemctl", "restart", "dnsmasq" });
+            var (success, output) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "restart", "dnsmasq" });
             if (!success)
             {
                 _logger.LogError("Failed to reload dnsmasq: {Output}", output);
@@ -158,7 +158,7 @@ public class SystemManager : ISystemManager
                 return new { success = false, error = $"Failed to set IP address: {output}" };
             }
 
-            // Safety cleanup: Ensure no other IPs remain (in case flush missed something or something re-added it)
+            // Safety cleanup: Ensure no other IPs remain
             try 
             {
                 var (s, o) = await _processRunner.RunCommandAsync(new[] { "ip", "-o", "addr", "show", "eth1" });
@@ -171,15 +171,10 @@ public class SystemManager : ISystemManager
                         if (match.Success)
                         {
                             var existingIp = match.Groups[1].Value;
-                            // Check if exact match to new IP (ignoring broadcast/scope parts usually not in this regex capture but just in case)
-                            // ip -o addr show output example: "inet 192.168.9.1/24 brd ..."
-                            // Regex captures "192.168.9.1/24"
-                            
                             if (existingIp != $"{ipAddress}/{cidr}")
                             {
                                 var (delSuccess, delError) = await _processRunner.RunCommandAsync(new[] { "ip", "addr", "del", existingIp, "dev", "eth1" });
                                 if (delSuccess) _logger.LogInformation("Removed residual IP {Ip} from eth1", existingIp);
-                                else _logger.LogWarning("Failed to remove residual IP {Ip}: {Error}", existingIp, delError);
                             }
                         }
                     }
@@ -190,6 +185,18 @@ public class SystemManager : ISystemManager
                 _logger.LogWarning(ex, "Error during residual IP cleanup");
             }
 
+            // Clean up hardcoded gateway config if it exists
+            try
+            {
+                var gatewayFile = "/etc/dnsmasq.d/eth1.conf";
+                if (File.Exists(gatewayFile))
+                {
+                    File.Delete(gatewayFile);
+                    _logger.LogInformation("Deleted hardcoded gateway config {File}", gatewayFile);
+                }
+            }
+            catch (Exception ex) { _logger.LogWarning(ex, "Error removing hardcoded gateway config"); }
+
             // Cleanup Static Leases that are out of subnet
             try
             {
@@ -199,10 +206,6 @@ public class SystemManager : ISystemManager
                     var lines = (await File.ReadAllLinesAsync(staticLeasesFile)).ToList();
                     var newLines = new List<string>();
                     bool modified = false;
-
-                    // Calculate network range roughly
-                    // Simple check: does the first 3 octets match? (Only works for /24)
-                    // Better: Parse IP and check masking. For now, assuming /24 or /16 based on subnetMask string.
                     
                     var subnetBytes = IPAddress.Parse(subnetMask).GetAddressBytes();
                     var newIpBytes = IPAddress.Parse(ipAddress).GetAddressBytes();
@@ -239,7 +242,7 @@ public class SystemManager : ISystemManager
                                 {
                                     _logger.LogInformation("Removing static lease {Ip} as it is outside new subnet", leaseIp);
                                     modified = true;
-                                    continue; // Skip adding this line
+                                    continue;
                                 }
                             }
                         }
@@ -255,6 +258,82 @@ public class SystemManager : ISystemManager
             catch (Exception ex)
             {
                  _logger.LogWarning(ex, "Error cleaning static leases");
+            }
+
+            // Persist the IP by updating /etc/dhcpcd.conf if possible
+            try
+            {
+                var dhcpcdFile = ETH1_NETWORK_CONFIG_FILE;
+                var ipWithCidr = $"{ipAddress}/{cidr}";
+
+                if (File.Exists(dhcpcdFile))
+                {
+                    var lines = (await File.ReadAllLinesAsync(dhcpcdFile)).ToList();
+                    var newLines = new List<string>();
+                    bool inEth1 = false;
+                    bool wroteStatic = false;
+
+                    for (int i = 0; i < lines.Count; i++)
+                    {
+                        var line = lines[i];
+                        if (line.Trim().StartsWith("interface eth1"))
+                        {
+                            inEth1 = true;
+                            newLines.Add(line);
+                            continue;
+                        }
+
+                        if (inEth1)
+                        {
+                            if (line.Trim().StartsWith("interface "))
+                            {
+                                if (!wroteStatic)
+                                {
+                                    newLines.Add($"static ip_address={ipWithCidr}");
+                                    wroteStatic = true;
+                                }
+                                inEth1 = false;
+                                newLines.Add(line);
+                                continue;
+                            }
+
+                            if (line.Trim().StartsWith("static ip_address="))
+                            {
+                                if (!wroteStatic)
+                                {
+                                    newLines.Add($"static ip_address={ipWithCidr}");
+                                    wroteStatic = true;
+                                }
+                                continue;
+                            }
+                        }
+
+                        newLines.Add(line);
+                    }
+
+                    if (!wroteStatic)
+                    {
+                        newLines.Add("");
+                        newLines.Add("interface eth1");
+                        newLines.Add($"static ip_address={ipWithCidr}");
+                    }
+
+                    await File.WriteAllLinesAsync(dhcpcdFile, newLines);
+                    _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
+
+                    await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "service", "dhcpcd", "restart" });
+                }
+                else
+                {
+                    var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
+                    await File.WriteAllTextAsync(dhcpcdFile, content);
+                    _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
+                    await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "service", "dhcpcd", "restart" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist eth1 IP to dhcpcd.conf");
             }
 
             // Update DHCP range to match new subnet (default start .10 to .200 for /24)
@@ -283,14 +362,9 @@ public class SystemManager : ISystemManager
                 await File.WriteAllTextAsync(DHCP_CONFIG_FILE, dhcpContent);
                 _logger.LogInformation("Updated DHCP config {File} to range {Start}-{End}", DHCP_CONFIG_FILE, dhcpStart, dhcpEnd);
 
-                // Stop dnsmasq, clear leases, restart dnsmasq to make sure clients pick up new range
-                var (stopSuccess, stopOut) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "stop" });
-                if (!stopSuccess)
-                {
-                    stopSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "stop" })).Item1;
-                }
-
-                // Remove old leases file
+                // Stop dnsmasq, clear leases, restart dnsmasq
+                var (stopSuccess, stopOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "stop", "dnsmasq" });
+                
                 try
                 {
                     var leaseFile = "/var/lib/misc/dnsmasq.leases";
@@ -298,13 +372,9 @@ public class SystemManager : ISystemManager
                 }
                 catch { }
 
-                var (startSuccess, startOut) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "start" });
-                if (!startSuccess)
-                {
-                    startSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "start" })).Item1;
-                }
-
-                await _processRunner.RunCommandAsync(new[] { "killall", "-USR1", "dnsmasq" });
+                var (startSuccess, startOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "start", "dnsmasq" });
+                
+                await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "killall", "-USR1", "dnsmasq" });
             }
             catch (Exception ex)
             {
@@ -312,7 +382,7 @@ public class SystemManager : ISystemManager
             }
 
             // Reload dnsmasq for changes to take effect if it's acting as a server
-            await _processRunner.RunCommandAsync(new[] { "systemctl", "restart", "dnsmasq" });
+            await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "restart", "dnsmasq" });
 
             return new { success = true };
         }
