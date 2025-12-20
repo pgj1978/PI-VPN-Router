@@ -1,0 +1,32 @@
+<div class="sidebar" [class.collapsed]="!menuOpen">
+  <div class="sidebar-header">
+    <h2 class="sidebar-logo">
+      <span class="logo-icon">🛡️</span>
+      <span class="logo-text">PiRouter</span>
+    </h2>
+    <button class="menu-toggle" (click)="toggleMenu()">
+      <span class="hamburger"></span>
+    </button>
+  </div>
+
+  <nav class="sidebar-nav">
+    <ul>
+      <li>
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-link">
+          <span class="nav-icon">📊</span>
+          <span class="nav-text">Dashboard</span>
+        </a>
+      </li>
+      <li>
+        <a routerLink="/routing" routerLinkActive="active" class="nav-link">
+          <span class="nav-icon">🔀</span>
+          <span class="nav-text">Routing</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <div class="sidebar-footer">
+    <p class="version">v2.0.0</p>
+  </div>
+</div>

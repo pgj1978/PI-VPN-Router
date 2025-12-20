@@ -1,0 +1,103 @@
+<div class="container">
+  <header>
+    <h1>Network Routing</h1>
+  </header>
+
+  @if (message) {
+    <div class="message">{{ message }}</div>
+  }
+
+  <div class="panels">
+    <!-- PiRouter IP Configuration Panel -->
+    <div class="panel">
+      <h2>PiRouter IP Configuration (eth1)</h2>
+      <p class="panel-description">Configure the IP address and subnet mask for the PiRouter's LAN interface.</p>
+
+      <div class="form-group">
+        <label for="eth1Ip">IP Address (eth1):</label>
+        <input type="text" id="eth1Ip" [(ngModel)]="eth1IpAddress" placeholder="e.g., 192.168.10.1" class="ip-input">
+      </div>
+      <div class="form-group">
+        <label for="eth1Subnet">Subnet Mask (eth1):</label>
+        <input type="text" id="eth1Subnet" [(ngModel)]="eth1SubnetMask" placeholder="e.g., 255.255.255.0" class="ip-input">
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" (click)="saveEth1IpConfig()" [disabled]="loading || !eth1IpAddress || !eth1SubnetMask">Save IP Config</button>
+      </div>
+    </div>
+
+    <!-- DHCP Server Panel -->
+    <div class="panel">
+      <h2>DHCP Server Configuration</h2>
+      <p class="panel-description">Enable or disable the DHCP server on eth1 and configure its range.</p>
+
+      <div class="toggle-container">
+        <label class="toggle">
+          <input type="checkbox" [(ngModel)]="dhcpEnabled">
+          <span class="toggle-label">Enable DHCP Server</span>
+        </label>
+      </div>
+
+      <div *ngIf="dhcpEnabled" class="dhcp-settings">
+        <div class="form-group">
+          <label for="dhcpStartIp">DHCP Range Start IP:</label>
+          <input type="text" id="dhcpStartIp" [(ngModel)]="dhcpStartIp" placeholder="e.g., 192.168.10.100" class="ip-input">
+        </div>
+        <div class="form-group">
+          <label for="dhcpEndIp">DHCP Range End IP:</label>
+          <input type="text" id="dhcpEndIp" [(ngModel)]="dhcpEndIp" placeholder="e.g., 192.168.10.200" class="ip-input">
+        </div>
+        <div class="form-group">
+          <label for="dhcpLeaseTime">DHCP Lease Time:</label>
+          <input type="text" id="dhcpLeaseTime" [(ngModel)]="dhcpLeaseTime" placeholder="e.g., 12h" class="ip-input">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" (click)="saveDhcpSettings()" [disabled]="loading || (dhcpEnabled && (!dhcpStartIp || !dhcpEndIp))">Save DHCP Config</button>
+      </div>
+    </div>
+
+    <!-- Static IP Configuration Panel -->
+    <div class="panel full-width">
+      <h2>Static IP Configuration (Devices)</h2>
+      <p class="panel-description">Assign static IPs to specific devices. Leave empty for dynamic.</p>
+
+      @if (loading) {
+        <div class="loading">Loading devices...</div>
+      }
+
+      <div class="table-responsive">
+        <table class="routing-table">
+          <thead>
+            <tr>
+              <th>Device Name</th>
+              <th>MAC Address</th>
+              <th>Current IP</th>
+              <th>Static IP Assignment</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (device of devices; track device.mac) {
+              <tr>
+                <td>{{ device.hostname || 'Unknown' }}</td>
+                <td class="monospace">{{ device.mac }}</td>
+                <td>{{ device.ip || '-' }}</td>
+                <td>
+                  <input type="text" class="ip-input" [(ngModel)]="device.static_ip" placeholder="Dynamic (Empty)">
+                </td>
+                <td>
+                  <button class="btn btn-small btn-primary" (click)="saveStaticIp(device)" [disabled]="loading">Save</button>
+                </td>
+              </tr>
+            }
+            @empty {
+              <tr><td colspan="5" class="empty-state">No devices found.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

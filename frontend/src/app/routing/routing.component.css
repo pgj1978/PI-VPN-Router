@@ -1,0 +1,108 @@
+.container {
+  /* Using global container styles */
+}
+
+/* Panel Layout for Routing Page */
+.panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 24px;
+}
+
+/* Specific styling for forms within panels */
+.form-group {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.ip-input {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.875rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ip-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.toggle-container {
+  margin-bottom: 24px;
+}
+
+.dhcp-settings {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+
+/* Table styles for static IP config */
+.table-responsive {
+  overflow-x: auto;
+  margin-bottom: 24px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.routing-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: white;
+}
+
+.routing-table th, .routing-table td {
+  padding: 16px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.routing-table th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.routing-table td {
+  font-size: 0.875rem;
+  color: #1f2937;
+}
+
+.routing-table tr:last-child td {
+  border-bottom: none;
+}
+
+.monospace {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  color: #4b5563;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+  margin-top: auto; /* Push actions to bottom */
+}
+
+/* Full width panel */
+@media (min-width: 1024px) {
+  .panel.full-width {
+    grid-column: 1 / -1;
+  }
+}

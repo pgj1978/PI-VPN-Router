@@ -1,0 +1,47 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Local Debug (without Docker)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder}/bin/Debug/net8.0/PiRouterBackend.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+                "uriFormat": "%s/api/devices",
+                "action": "openExternally"
+            }
+        },
+        {
+            "name": "Remote Debug - Pi (SSH Tunnel)",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "${command:pickProcess}",
+            "pipeTransport": {
+                "pipeCwd": "${workspaceFolder}",
+                "pipeProgram": "ssh",
+                "pipeArgs": [
+                    "-pw", "active35",
+                    "pgj99@192.168.10.1"
+                ],
+                "debuggerPath": "/vsdbg/vsdbg",
+                "quoteArgs": false
+            },
+            "sourceMap": {
+                "/app": "${workspaceFolder}"
+            },
+            "justMyCode": false
+        },
+        {
+            "name": "Remote Debug - Pi (Direct Port Forward)",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "${command:pickRemoteProcess}",
+            "logging": { "engineLogging": true }
+        }
+    ]
+}
+

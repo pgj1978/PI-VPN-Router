@@ -1,0 +1,121 @@
+<div class="container">
+  <header>
+    <h1>{{ title }}</h1>
+    <div class="status-badge" [style.background-color]="getStatusColor()">
+      {{ getStatusText() }}
+    </div>
+  </header>
+
+  @if (message) {
+    <div class="message">{{ message }}</div>
+  }
+
+  <div class="panels">
+    <div class="panel">
+      <h2>VPN Connections</h2>
+
+      @if (loading) {
+        <div class="loading">Processing...</div>
+      }
+
+      <!-- Kill Switch Toggle -->
+      <div class="kill-switch-container">
+        <label class="toggle kill-switch">
+          <input
+            type="checkbox"
+            [checked]="killSwitchEnabled"
+            (change)="toggleKillSwitch($event)">
+          <span class="toggle-label">
+            🛡️ Kill Switch {{killSwitchEnabled ? 'ON' : 'OFF'}}
+          </span>
+        </label>
+        <p class="help-text">Block internet if VPN disconnects</p>
+      </div>
+
+      @if (vpnStatus?.connected) {
+        <button class="btn btn-danger btn-disconnect" (click)="disconnectVpn()" [disabled]="loading">
+          Disconnect VPN
+        </button>
+      }
+
+      <div class="vpn-list">
+        @for (config of vpnConfigs; track config.name) {
+          <div class="vpn-item">
+            <div class="vpn-info">
+              <strong>{{ config.name }}</strong>
+              @if (config.active) {
+                <span class="badge-active">Active</span>
+              }
+            </div>
+            <button
+              class="btn btn-primary"
+              (click)="connectVpn(config.name)"
+              [disabled]="loading || config.active">
+              Connect
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Connected Devices</h2>
+      <p class="panel-description">Control which devices use the VPN</p>
+
+      <div class="device-list">
+        @for (device of devices; track device.mac) {
+          <div class="device-item">
+            <div class="device-info">
+              <strong>{{ device.hostname || device.ip }}</strong>
+              <span class="device-details">{{ device.ip }} ({{ device.mac }})</span>
+            </div>
+            <label class="toggle">
+              <input
+                type="checkbox"
+                [checked]="device.bypass_vpn"
+                (change)="toggleDeviceBypass(device)">
+              <span class="toggle-label">
+               Bypass VPN
+              </span>
+            </label>
+          </div>
+        } @empty {
+          <p class="empty-state">No devices connected</p>
+        }
+      </div>
+    </div>
+
+    <!-- Domain Bypass Panel -->
+    <div class="panel">
+      <h2>Domain Bypass (Split Tunneling)</h2>
+      <p class="panel-description">Domains that bypass the VPN</p>
+
+      <!-- Add Domain Form -->
+      <div class="add-domain-form">
+        <input
+          type="text"
+          placeholder="example.com"
+          [(ngModel)]="newDomain"
+          (keyup.enter)="addDomain()"
+          class="domain-input">
+        <button class="btn btn-primary" (click)="addDomain()" [disabled]="!newDomain || loading">
+          Add Domain
+        </button>
+      </div>
+
+      <!-- Domain List -->
+      <div class="domain-list">
+        @for (domain of bypassDomains; track domain.domain) {
+          <div class="domain-item">
+            <span class="domain-name">{{ domain.domain }}</span>
+            <button class="btn btn-small btn-danger" (click)="removeDomain(domain.domain)" [disabled]="loading">
+              Remove
+            </button>
+          </div>
+        } @empty {
+          <p class="empty-state">No domains configured</p>
+        }
+      </div>
+    </div>
+  </div>
+</div>
