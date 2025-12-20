@@ -238,6 +238,60 @@ public class SystemManager : ISystemManager
                 _logger.LogWarning(ex, "Failed to persist eth1 IP to dhcpcd.conf");
             }
 
+            // Update DHCP range to match new subnet (default start .10 to .200 for /24)
+            try
+            {
+                string dhcpStart = null!;
+                string dhcpEnd = null!;
+                var parts = ipAddress.Split('.').Select(int.Parse).ToArray();
+                if (cidr >= 24)
+                {
+                    dhcpStart = $"{parts[0]}.{parts[1]}.{parts[2]}.10";
+                    dhcpEnd = $"{parts[0]}.{parts[1]}.{parts[2]}.200";
+                }
+                else if (cidr >= 16)
+                {
+                    dhcpStart = $"{parts[0]}.{parts[1]}.0.10";
+                    dhcpEnd = $"{parts[0]}.{parts[1]}.255.200";
+                }
+                else
+                {
+                    dhcpStart = $"{parts[0]}.0.0.10";
+                    dhcpEnd = $"{parts[0]}.255.255.200";
+                }
+
+                var dhcpContent = $"interface=eth1\ndhcp-range={dhcpStart},{dhcpEnd},12h\n";
+                await File.WriteAllTextAsync(DHCP_CONFIG_FILE, dhcpContent);
+                _logger.LogInformation("Updated DHCP config {File} to range {Start}-{End}", DHCP_CONFIG_FILE, dhcpStart, dhcpEnd);
+
+                // Stop dnsmasq, clear leases, restart dnsmasq to make sure clients pick up new range
+                var (stopSuccess, stopOut) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "stop" });
+                if (!stopSuccess)
+                {
+                    stopSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "stop" })).Item1;
+                }
+
+                // Remove old leases file
+                try
+                {
+                    var leaseFile = "/var/lib/misc/dnsmasq.leases";
+                    if (File.Exists(leaseFile)) File.Delete(leaseFile);
+                }
+                catch { }
+
+                var (startSuccess, startOut) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "start" });
+                if (!startSuccess)
+                {
+                    startSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "start" })).Item1;
+                }
+
+                await _processRunner.RunCommandAsync(new[] { "killall", "-USR1", "dnsmasq" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to update DHCP range for new eth1 IP");
+            }
+
             // Reload dnsmasq for changes to take effect if it's acting as a server
             await _processRunner.RunCommandAsync(new[] { "systemctl", "restart", "dnsmasq" });
 
