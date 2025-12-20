@@ -392,6 +392,21 @@ public class DeviceManager : IDeviceManager
         return null;
     }
 
+    private async Task<string> GetPiLanIpAsync()
+    {
+        try
+        {
+            var (success, output) = await _processRunner.RunCommandAsync(new[] { "ip", "addr", "show", "eth1" });
+            if (success)
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(output, @"inet (?<ip>\d{1,3}(?:\.\d{1,3}){3})/(?<cidr>\d{1,2})");
+                if (m.Success) return m.Groups["ip"].Value;
+            }
+        }
+        catch { }
+        return PI_LAN_IP; // fallback to configured default
+    }
+
     private async Task EnsureBypassInfrastructure()
     {
         await _processRunner.RunCommandAsync(new[] { 
@@ -429,6 +444,8 @@ public class DeviceManager : IDeviceManager
                 return;
             }
 
+            var piLanIp = await GetPiLanIpAsync();
+
             if (bypass)
             {
                 await EnsureBypassInfrastructure();
@@ -436,12 +453,12 @@ public class DeviceManager : IDeviceManager
 
                 await _processRunner.RunCommandAsync(new[] {
                     "iptables", "-t", "mangle", "-D", "PREROUTING", 
-                    "-i", LAN_IFACE, "-s", ip, "!", "-d", PI_LAN_IP,
+                    "-i", LAN_IFACE, "-s", ip, "!", "-d", piLanIp,
                     "-j", "MARK", "--set-mark", BYPASS_TABLE
                 }, logFailure: false);
                 await _processRunner.RunCommandAsync(new[] {
                     "iptables", "-t", "mangle", "-A", "PREROUTING", 
-                    "-i", LAN_IFACE, "-s", ip, "!", "-d", PI_LAN_IP,
+                    "-i", LAN_IFACE, "-s", ip, "!", "-d", piLanIp,
                     "-j", "MARK", "--set-mark", BYPASS_TABLE
                 });
 
@@ -476,7 +493,7 @@ public class DeviceManager : IDeviceManager
 
                 await _processRunner.RunCommandAsync(new[] {
                     "iptables", "-t", "mangle", "-D", "PREROUTING", 
-                    "-i", LAN_IFACE, "-s", ip, "!", "-d", PI_LAN_IP,
+                    "-i", LAN_IFACE, "-s", ip, "!", "-d", piLanIp,
                     "-j", "MARK", "--set-mark", BYPASS_TABLE
                 }, logFailure: false);
 

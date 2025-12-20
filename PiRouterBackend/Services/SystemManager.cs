@@ -140,10 +140,6 @@ public class SystemManager : ISystemManager
     {
         try
         {
-            // This is a simplified approach. A robust solution would parse/modify /etc/dhcpcd.conf or similar.
-            // For now, this will apply the IP temporarily and restart networking.
-            // Persistence across reboots would need file modification.
-
             int cidr = SubnetMaskToCidr(subnetMask);
             if (cidr == -1)
             {
@@ -153,7 +149,7 @@ public class SystemManager : ISystemManager
             // Flush old address
             await _processRunner.RunCommandAsync(new[] { "ip", "addr", "flush", "dev", "eth1" });
             
-            // Add new address
+            // Add new address (temporary)
             var (success, output) = await _processRunner.RunCommandAsync(new[] { "ip", "addr", "add", $"{ipAddress}/{cidr}", "dev", "eth1" });
             if (!success)
             {
@@ -161,10 +157,87 @@ public class SystemManager : ISystemManager
                 return new { success = false, error = $"Failed to set IP address: {output}" };
             }
 
-            // This should restart networking for eth1, but may need a more general restart
-            // For persistence, /etc/dhcpcd.conf needs to be updated.
-            // For now, these changes are not persistent. This is a known limitation.
-            
+            // Persist the IP by updating /etc/dhcpcd.conf if possible
+            try
+            {
+                var dhcpcdFile = ETH1_NETWORK_CONFIG_FILE;
+                var ipWithCidr = $"{ipAddress}/{cidr}";
+
+                if (File.Exists(dhcpcdFile))
+                {
+                    var lines = (await File.ReadAllLinesAsync(dhcpcdFile)).ToList();
+                    var newLines = new List<string>();
+                    bool inEth1 = false;
+                    bool wroteStatic = false;
+
+                    for (int i = 0; i < lines.Count; i++)
+                    {
+                        var line = lines[i];
+                        if (line.Trim().StartsWith("interface eth1"))
+                        {
+                            inEth1 = true;
+                            newLines.Add(line);
+                            continue;
+                        }
+
+                        if (inEth1)
+                        {
+                            if (line.Trim().StartsWith("interface "))
+                            {
+                                // new interface block; ensure we wrote static before leaving
+                                if (!wroteStatic)
+                                {
+                                    newLines.Add($"static ip_address={ipWithCidr}");
+                                    wroteStatic = true;
+                                }
+                                inEth1 = false;
+                                newLines.Add(line);
+                                continue;
+                            }
+
+                            // skip existing static ip_address lines for eth1
+                            if (line.Trim().StartsWith("static ip_address="))
+                            {
+                                if (!wroteStatic)
+                                {
+                                    newLines.Add($"static ip_address={ipWithCidr}");
+                                    wroteStatic = true;
+                                }
+                                continue;
+                            }
+                        }
+
+                        newLines.Add(line);
+                    }
+
+                    if (!wroteStatic)
+                    {
+                        // append block
+                        newLines.Add("");
+                        newLines.Add("interface eth1");
+                        newLines.Add($"static ip_address={ipWithCidr}");
+                    }
+
+                    await File.WriteAllLinesAsync(dhcpcdFile, newLines);
+                    _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
+
+                    // Try to restart dhcpcd to apply persistent changes
+                    await _processRunner.RunCommandAsync(new[] { "service", "dhcpcd", "restart" });
+                }
+                else
+                {
+                    // If file doesn't exist, create a minimal dhcpcd config for eth1
+                    var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
+                    await File.WriteAllTextAsync(dhcpcdFile, content);
+                    _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
+                    await _processRunner.RunCommandAsync(new[] { "service", "dhcpcd", "restart" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist eth1 IP to dhcpcd.conf");
+            }
+
             // Reload dnsmasq for changes to take effect if it's acting as a server
             await _processRunner.RunCommandAsync(new[] { "systemctl", "restart", "dnsmasq" });
 
