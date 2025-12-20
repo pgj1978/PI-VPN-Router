@@ -30,6 +30,7 @@ services:
       - /etc/dnsmasq.conf:/etc/dnsmasq.conf
       - /etc/dnsmasq.d:/etc/dnsmasq.d
       - /etc/network:/etc/network
+      - /etc/dhcpcd.conf:/etc/dhcpcd.conf
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:51508
