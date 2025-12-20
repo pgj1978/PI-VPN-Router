@@ -1,20 +1,25 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - main
 
 pool:
-  vmImage: ubuntu-latest
   name: 'Pi Router'
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+# 1. Ensure the directory exists and copy files
+- pwsh: |
+    # Ensure the target directory exists
+    New-Item -ItemType Directory -Force -Path /home/pgj99/code/PiRouter
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    # Copy everything from the checkout directory to the target
+    # -Recurse handles subfolders, -Force overwrites existing files
+    Copy-Item -Path "$(System.DefaultWorkingDirectory)/*" `
+              -Destination /home/pgj99/code/PiRouter `
+              -Recurse `
+              -Force
+  displayName: 'Sync files to PiRouter folder'
+
+# 2. Run Docker Compose
+- pwsh: |
+    cd /home/pgj99/code/PiRouter
+    docker compose up -d --build
+  displayName: 'Docker Compose Up'
