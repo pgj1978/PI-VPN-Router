@@ -141,15 +141,16 @@ public class SystemManager : ISystemManager
         try
         {
             int cidr = SubnetMaskToCidr(subnetMask);
-            if (cidr == -1)
+            if (cidr <= 0) // Fix for invalid or 0.0.0.0 mask
             {
-                return new { success = false, error = "Invalid subnet mask" };
+                _logger.LogWarning("Invalid CIDR {Cidr} derived from mask {Mask}. Defaulting to 24.", cidr, subnetMask);
+                cidr = 24;
             }
 
             // Flush old address
             await _processRunner.RunCommandAsync(new[] { "ip", "addr", "flush", "dev", "eth1" });
             
-            // Add new address (temporary)
+            // Add new address
             var (success, output) = await _processRunner.RunCommandAsync(new[] { "ip", "addr", "add", $"{ipAddress}/{cidr}", "dev", "eth1" });
             if (!success)
             {
@@ -157,85 +158,103 @@ public class SystemManager : ISystemManager
                 return new { success = false, error = $"Failed to set IP address: {output}" };
             }
 
-            // Persist the IP by updating /etc/dhcpcd.conf if possible
-            try
+            // Safety cleanup: Ensure no other IPs remain (in case flush missed something or something re-added it)
+            try 
             {
-                var dhcpcdFile = ETH1_NETWORK_CONFIG_FILE;
-                var ipWithCidr = $"{ipAddress}/{cidr}";
-
-                if (File.Exists(dhcpcdFile))
+                var (s, o) = await _processRunner.RunCommandAsync(new[] { "ip", "-o", "addr", "show", "eth1" });
+                if (s)
                 {
-                    var lines = (await File.ReadAllLinesAsync(dhcpcdFile)).ToList();
-                    var newLines = new List<string>();
-                    bool inEth1 = false;
-                    bool wroteStatic = false;
-
-                    for (int i = 0; i < lines.Count; i++)
+                    var lines = o.Split('\n');
+                    foreach (var line in lines)
                     {
-                        var line = lines[i];
-                        if (line.Trim().StartsWith("interface eth1"))
+                        var match = Regex.Match(line, @"inet\s+(\S+)");
+                        if (match.Success)
                         {
-                            inEth1 = true;
-                            newLines.Add(line);
-                            continue;
-                        }
-
-                        if (inEth1)
-                        {
-                            if (line.Trim().StartsWith("interface "))
+                            var existingIp = match.Groups[1].Value;
+                            // Check if exact match to new IP (ignoring broadcast/scope parts usually not in this regex capture but just in case)
+                            // ip -o addr show output example: "inet 192.168.9.1/24 brd ..."
+                            // Regex captures "192.168.9.1/24"
+                            
+                            if (existingIp != $"{ipAddress}/{cidr}")
                             {
-                                // new interface block; ensure we wrote static before leaving
-                                if (!wroteStatic)
-                                {
-                                    newLines.Add($"static ip_address={ipWithCidr}");
-                                    wroteStatic = true;
-                                }
-                                inEth1 = false;
-                                newLines.Add(line);
-                                continue;
-                            }
-
-                            // skip existing static ip_address lines for eth1
-                            if (line.Trim().StartsWith("static ip_address="))
-                            {
-                                if (!wroteStatic)
-                                {
-                                    newLines.Add($"static ip_address={ipWithCidr}");
-                                    wroteStatic = true;
-                                }
-                                continue;
+                                var (delSuccess, delError) = await _processRunner.RunCommandAsync(new[] { "ip", "addr", "del", existingIp, "dev", "eth1" });
+                                if (delSuccess) _logger.LogInformation("Removed residual IP {Ip} from eth1", existingIp);
+                                else _logger.LogWarning("Failed to remove residual IP {Ip}: {Error}", existingIp, delError);
                             }
                         }
-
-                        newLines.Add(line);
                     }
-
-                    if (!wroteStatic)
-                    {
-                        // append block
-                        newLines.Add("");
-                        newLines.Add("interface eth1");
-                        newLines.Add($"static ip_address={ipWithCidr}");
-                    }
-
-                    await File.WriteAllLinesAsync(dhcpcdFile, newLines);
-                    _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
-
-                    // Try to restart dhcpcd to apply persistent changes
-                    await _processRunner.RunCommandAsync(new[] { "service", "dhcpcd", "restart" });
-                }
-                else
-                {
-                    // If file doesn't exist, create a minimal dhcpcd config for eth1
-                    var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
-                    await File.WriteAllTextAsync(dhcpcdFile, content);
-                    _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
-                    await _processRunner.RunCommandAsync(new[] { "service", "dhcpcd", "restart" });
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to persist eth1 IP to dhcpcd.conf");
+                _logger.LogWarning(ex, "Error during residual IP cleanup");
+            }
+
+            // Cleanup Static Leases that are out of subnet
+            try
+            {
+                var staticLeasesFile = "/etc/dnsmasq.d/02-static-leases.conf";
+                if (File.Exists(staticLeasesFile))
+                {
+                    var lines = (await File.ReadAllLinesAsync(staticLeasesFile)).ToList();
+                    var newLines = new List<string>();
+                    bool modified = false;
+
+                    // Calculate network range roughly
+                    // Simple check: does the first 3 octets match? (Only works for /24)
+                    // Better: Parse IP and check masking. For now, assuming /24 or /16 based on subnetMask string.
+                    
+                    var subnetBytes = IPAddress.Parse(subnetMask).GetAddressBytes();
+                    var newIpBytes = IPAddress.Parse(ipAddress).GetAddressBytes();
+
+                    foreach (var line in lines)
+                    {
+                        if (line.Trim().StartsWith("dhcp-host="))
+                        {
+                            var parts = line.Split(',');
+                            string? leaseIp = null;
+                            foreach(var p in parts)
+                            {
+                                if (IPAddress.TryParse(p.Trim(), out var parsed)) 
+                                {
+                                    leaseIp = p.Trim();
+                                    break;
+                                }
+                            }
+
+                            if (leaseIp != null)
+                            {
+                                var leaseBytes = IPAddress.Parse(leaseIp).GetAddressBytes();
+                                bool inSubnet = true;
+                                for(int i=0; i<4; i++)
+                                {
+                                    if ((leaseBytes[i] & subnetBytes[i]) != (newIpBytes[i] & subnetBytes[i]))
+                                    {
+                                        inSubnet = false;
+                                        break;
+                                    }
+                                }
+
+                                if (!inSubnet)
+                                {
+                                    _logger.LogInformation("Removing static lease {Ip} as it is outside new subnet", leaseIp);
+                                    modified = true;
+                                    continue; // Skip adding this line
+                                }
+                            }
+                        }
+                        newLines.Add(line);
+                    }
+
+                    if (modified)
+                    {
+                        await File.WriteAllLinesAsync(staticLeasesFile, newLines);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                 _logger.LogWarning(ex, "Error cleaning static leases");
             }
 
             // Update DHCP range to match new subnet (default start .10 to .200 for /24)

@@ -45,7 +45,7 @@ export interface IpConfig {
   providedIn: 'root'
 })
 export class ApiService {
-  private apiUrl = `http://192.168.10.1:51508/api`;
+  private apiUrl = `http://${window.location.hostname}:51508/api`;
 
   constructor(private http: HttpClient) { }
 
