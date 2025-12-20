@@ -19,7 +19,7 @@ steps:
   displayName: 'Sync files to PiRouter folder'
 
 # 2. Run Docker Compose
-- pwsh: |
+- script: |
     cd /home/pgj99/code/PiRouter
     docker compose up -d --build
   displayName: 'Docker Compose Up'
