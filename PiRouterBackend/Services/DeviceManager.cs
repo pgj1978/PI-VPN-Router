@@ -224,12 +224,18 @@ public class DeviceManager : IDeviceManager
             // Step 2: Stop dnsmasq service
             _logger.LogInformation("Stopping dnsmasq service");
             // Try using init system - works with host network mode
-            var (stopSuccess, stopOutput) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "stop" });
+            var (stopSuccess, stopOutput) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "stop" }, logFailure: false);
             
             if (!stopSuccess)
             {
                 _logger.LogWarning("Could not stop dnsmasq with init.d, trying service command");
-                stopSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "stop" })).Item1;
+                stopSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "stop" }, logFailure: false)).Item1;
+            }
+            
+            if (!stopSuccess)
+            {
+                _logger.LogWarning("Could not stop dnsmasq with service command, trying systemctl");
+                stopSuccess = (await _processRunner.RunCommandAsync(new[] { "systemctl", "stop", "dnsmasq" }, logFailure: false)).Item1;
             }
             
             _logger.LogInformation("Waiting for dnsmasq to fully stop");
@@ -241,18 +247,23 @@ public class DeviceManager : IDeviceManager
                 var leaseFile = "/var/lib/misc/dnsmasq.leases";
                 if (File.Exists(leaseFile))
                 {
-                    // Use sed for atomic in-place removal of the lease for the specific MAC address
-                    var (sedSuccess, sedOutput) = await _processRunner.RunCommandAsync(new[] { 
-                        "sed", "-i", $@"/{mac}/d", leaseFile 
-                    });
-
-                    if (sedSuccess)
+                    // Remove lines containing the MAC directly from the lease file (avoid external sed dependency)
+                    var leaseLines = await File.ReadAllLinesAsync(leaseFile);
+                    var originalCount = leaseLines.Length;
+                    var filtered = leaseLines.Where(l =>
                     {
-                        _logger.LogInformation("Cleared lease(s) for {Mac} using sed.", mac);
+                        var parts = l.Split(' ');
+                        return !(parts.Length >= 2 && parts[1].Equals(mac, StringComparison.OrdinalIgnoreCase));
+                    }).ToArray();
+
+                    if (filtered.Length < originalCount)
+                    {
+                        await File.WriteAllLinesAsync(leaseFile, filtered);
+                        _logger.LogInformation("Cleared {Count} lease(s) for {Mac} from lease file.", originalCount - filtered.Length, mac);
                     }
                     else
                     {
-                        _logger.LogWarning("Failed to clear lease for {Mac} using sed. Output: {Output}", mac, sedOutput);
+                        _logger.LogInformation("No leases found for {Mac} to clear.", mac);
                     }
                 }
                 else
@@ -291,17 +302,23 @@ public class DeviceManager : IDeviceManager
 
             // Step 5: Start dnsmasq service
             _logger.LogInformation("Starting dnsmasq service");
-            var (startSuccess, startOutput) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "start" });
+            var (startSuccess, startOutput) = await _processRunner.RunCommandAsync(new[] { "/etc/init.d/dnsmasq", "start" }, logFailure: false);
             
             if (!startSuccess)
             {
                 _logger.LogWarning("Could not start dnsmasq with init.d, trying service command");
-                startSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "start" })).Item1;
+                startSuccess = (await _processRunner.RunCommandAsync(new[] { "service", "dnsmasq", "start" }, logFailure: false)).Item1;
             }
 
             if (!startSuccess)
             {
-                _logger.LogError("Failed to start dnsmasq");
+                _logger.LogWarning("Could not start dnsmasq with service command, trying systemctl");
+                startSuccess = (await _processRunner.RunCommandAsync(new[] { "systemctl", "start", "dnsmasq" }, logFailure: false)).Item1;
+            }
+
+            if (!startSuccess)
+            {
+                _logger.LogError("Failed to start dnsmasq with all methods");
                 return new { success = false, error = "Failed to restart dnsmasq service" };
             }
 
@@ -311,7 +328,7 @@ public class DeviceManager : IDeviceManager
             // Step 6: Send reload signal
             try
             {
-                await _processRunner.RunCommandAsync(new[] { "killall", "-USR1", "dnsmasq" });
+                await _processRunner.RunCommandAsync(new[] { "killall", "-USR1", "dnsmasq" }, logFailure: false);
             }
             catch
             {

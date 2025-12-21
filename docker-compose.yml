@@ -20,6 +20,7 @@ services:
     build: ./PiRouterBackend
     container_name: pirouter-backend-csharp
     network_mode: host
+    pid: host
     privileged: true
     restart: unless-stopped
     volumes:

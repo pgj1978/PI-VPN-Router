@@ -90,7 +90,7 @@ public class SystemManager : ISystemManager
             }
 
             // Reload dnsmasq
-            var (success, output) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "restart", "dnsmasq" });
+            var (success, output) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dnsmasq" });
             if (!success)
             {
                 _logger.LogError("Failed to reload dnsmasq: {Output}", output);
@@ -321,14 +321,28 @@ public class SystemManager : ISystemManager
                     await File.WriteAllLinesAsync(dhcpcdFile, newLines);
                     _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
 
-                    await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "service", "dhcpcd", "restart" });
+                    try 
+                    {
+                        await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dhcpcd" });
+                    }
+                    catch (Exception ex) 
+                    {
+                        _logger.LogWarning("Failed to restart dhcpcd (it might not be installed/active): {Message}", ex.Message);
+                    }
                 }
                 else
                 {
                     var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
                     await File.WriteAllTextAsync(dhcpcdFile, content);
                     _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
-                    await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "service", "dhcpcd", "restart" });
+                    try 
+                    {
+                        await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dhcpcd" });
+                    }
+                    catch (Exception ex) 
+                    {
+                        _logger.LogWarning("Failed to restart dhcpcd (it might not be installed/active): {Message}", ex.Message);
+                    }
                 }
             }
             catch (Exception ex)
@@ -363,7 +377,7 @@ public class SystemManager : ISystemManager
                 _logger.LogInformation("Updated DHCP config {File} to range {Start}-{End}", DHCP_CONFIG_FILE, dhcpStart, dhcpEnd);
 
                 // Stop dnsmasq, clear leases, restart dnsmasq
-                var (stopSuccess, stopOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "stop", "dnsmasq" });
+                var (stopSuccess, stopOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "stop", "dnsmasq" });
                 
                 try
                 {
@@ -372,9 +386,9 @@ public class SystemManager : ISystemManager
                 }
                 catch { }
 
-                var (startSuccess, startOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "start", "dnsmasq" });
+                var (startSuccess, startOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "start", "dnsmasq" });
                 
-                await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "killall", "-USR1", "dnsmasq" });
+                await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/killall", "-USR1", "dnsmasq" });
             }
             catch (Exception ex)
             {
@@ -382,7 +396,7 @@ public class SystemManager : ISystemManager
             }
 
             // Reload dnsmasq for changes to take effect if it's acting as a server
-            await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "systemctl", "restart", "dnsmasq" });
+            await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dnsmasq" });
 
             return new { success = true };
         }
