@@ -1,0 +1,22 @@
+<div class="system-container">
+  <h2>System Management</h2>
+  
+  <div class="card">
+    <h3>Power Controls</h3>
+    <p>Perform system-level power actions.</p>
+    
+    <div class="actions">
+      <button class="btn btn-danger" (click)="confirmReboot()" [disabled]="isRebooting">
+        {{ isRebooting ? 'Rebooting...' : 'Reboot System' }}
+      </button>
+    </div>
+
+    <div *ngIf="message" class="alert alert-info mt-3">
+      {{ message }}
+    </div>
+
+    <div *ngIf="error" class="alert alert-danger mt-3">
+      {{ error }}
+    </div>
+  </div>
+</div>

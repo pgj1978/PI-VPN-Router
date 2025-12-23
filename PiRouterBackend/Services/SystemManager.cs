@@ -11,6 +11,7 @@ public interface ISystemManager
     Task<object> SetDhcpStatus(bool enable, string? startIp, string? endIp, string? leaseTime);
     Task<object> GetEth1IpConfig();
     Task<object> SetEth1IpConfig(string ipAddress, string subnetMask);
+    Task RebootSystem();
 }
 
 public class SystemManager : ISystemManager
@@ -25,6 +26,15 @@ public class SystemManager : ISystemManager
     {
         _processRunner = processRunner;
         _logger = logger;
+    }
+
+    public async Task RebootSystem()
+    {
+        _logger.LogWarning("Initiating system reboot via API request");
+        // Use nsenter to run reboot on the host
+        await _processRunner.RunCommandAsync(new[] { 
+            "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/sbin/reboot" 
+        }, logFailure: true);
     }
 
     public async Task<object> GetSystemInfo()

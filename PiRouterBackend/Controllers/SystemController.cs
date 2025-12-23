@@ -75,4 +75,19 @@ public class SystemController : ControllerBase
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    [HttpPost("reboot")]
+    public async Task<IActionResult> Reboot()
+    {
+        try
+        {
+            await _systemManager.RebootSystem();
+            return Ok(new { message = "System is rebooting..." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error rebooting system");
+            return StatusCode(500, new { error = ex.Message });
+        }
+    }
 }

@@ -123,4 +123,8 @@ export class ApiService {
   setEth1IpConfig(ipAddress: string, subnetMask: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/system/eth1-ip?ipAddress=${ipAddress}&subnetMask=${subnetMask}`, {});
   }
+
+  rebootSystem(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/system/reboot`, {});
+  }
 }
