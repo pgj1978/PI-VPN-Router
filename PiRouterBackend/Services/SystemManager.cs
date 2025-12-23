@@ -52,12 +52,28 @@ public class SystemManager : ISystemManager
             var content = await File.ReadAllTextAsync(DHCP_CONFIG_FILE);
             var dhcpRangeMatch = Regex.Match(content, @"dhcp-range=(?<startIp>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}),(?<endIp>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})");
             var leaseTimeMatch = Regex.Match(content, @"dhcp-lease-time=(?<leaseTime>.*)");
+            
+            // Handle case where lease time is in the dhcp-range line: dhcp-range=...,...,12h
+            string? leaseTime = null;
+            if (leaseTimeMatch.Success)
+            {
+                leaseTime = leaseTimeMatch.Groups["leaseTime"].Value;
+            }
+            else
+            {
+                 // Try to find it in the dhcp-range line
+                 var rangeLineMatch = Regex.Match(content, @"dhcp-range=[\d\.]+,[\d\.]+,([^\n]+)");
+                 if (rangeLineMatch.Success)
+                 {
+                     leaseTime = rangeLineMatch.Groups[1].Value.Trim();
+                 }
+            }
 
             return new
             {
                 enabled = dhcpRangeMatch.Success,
                 dhcpRange = dhcpRangeMatch.Success ? $"{dhcpRangeMatch.Groups["startIp"].Value},{dhcpRangeMatch.Groups["endIp"].Value}" : null,
-                leaseTime = leaseTimeMatch.Success ? leaseTimeMatch.Groups["leaseTime"].Value : null
+                leaseTime = leaseTime
             };
         }
         catch (Exception ex)
@@ -90,11 +106,10 @@ public class SystemManager : ISystemManager
             }
 
             // Reload dnsmasq
-            var (success, output) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dnsmasq" });
+            bool success = await RunHostServiceCommand("dnsmasq", "restart");
             if (!success)
             {
-                _logger.LogError("Failed to reload dnsmasq: {Output}", output);
-                return new { success = false, error = $"Failed to reload dnsmasq: {output}" };
+                return new { success = false, error = "Failed to reload dnsmasq service" };
             }
 
             return new { success = true, enabled = enable };
@@ -146,6 +161,21 @@ public class SystemManager : ISystemManager
                 _logger.LogWarning("Invalid CIDR {Cidr} derived from mask {Mask}. Defaulting to 24.", cidr, subnetMask);
                 cidr = 24;
             }
+
+            // Retrieve existing lease time before we potentially overwrite the file
+            string currentLeaseTime = "12h"; // Default
+            try 
+            {
+                if (File.Exists(DHCP_CONFIG_FILE))
+                {
+                    var content = await File.ReadAllTextAsync(DHCP_CONFIG_FILE);
+                    var rangeLineMatch = Regex.Match(content, @"dhcp-range=[\d\.]+,[\d\.]+,([^\n]+)");
+                    if (rangeLineMatch.Success)
+                    {
+                        currentLeaseTime = rangeLineMatch.Groups[1].Value.Trim();
+                    }
+                }
+            } catch {}
 
             // Flush old address
             await _processRunner.RunCommandAsync(new[] { "ip", "addr", "flush", "dev", "eth1" });
@@ -321,28 +351,16 @@ public class SystemManager : ISystemManager
                     await File.WriteAllLinesAsync(dhcpcdFile, newLines);
                     _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
 
-                    try 
-                    {
-                        await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dhcpcd" });
-                    }
-                    catch (Exception ex) 
-                    {
-                        _logger.LogWarning("Failed to restart dhcpcd (it might not be installed/active): {Message}", ex.Message);
-                    }
+                    // Restart dhcpcd using robust method
+                    await RunHostServiceCommand("dhcpcd", "restart");
                 }
                 else
                 {
+                    // If file doesn't exist, create it
                     var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
                     await File.WriteAllTextAsync(dhcpcdFile, content);
                     _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
-                    try 
-                    {
-                        await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dhcpcd" });
-                    }
-                    catch (Exception ex) 
-                    {
-                        _logger.LogWarning("Failed to restart dhcpcd (it might not be installed/active): {Message}", ex.Message);
-                    }
+                    await RunHostServiceCommand("dhcpcd", "restart");
                 }
             }
             catch (Exception ex)
@@ -350,7 +368,7 @@ public class SystemManager : ISystemManager
                 _logger.LogWarning(ex, "Failed to persist eth1 IP to dhcpcd.conf");
             }
 
-            // Update DHCP range to match new subnet (default start .10 to .200 for /24)
+            // Update DHCP range to match new subnet
             try
             {
                 string dhcpStart = null!;
@@ -372,31 +390,66 @@ public class SystemManager : ISystemManager
                     dhcpEnd = $"{parts[0]}.255.255.200";
                 }
 
-                var dhcpContent = $"interface=eth1\ndhcp-range={dhcpStart},{dhcpEnd},12h\n";
+                // Use preserved lease time
+                var dhcpContent = $"interface=eth1\ndhcp-range={dhcpStart},{dhcpEnd},{currentLeaseTime}\n";
                 await File.WriteAllTextAsync(DHCP_CONFIG_FILE, dhcpContent);
-                _logger.LogInformation("Updated DHCP config {File} to range {Start}-{End}", DHCP_CONFIG_FILE, dhcpStart, dhcpEnd);
+                _logger.LogInformation("Updated DHCP config {File} to range {Start}-{End} with lease {Lease}", DHCP_CONFIG_FILE, dhcpStart, dhcpEnd, currentLeaseTime);
 
-                // Stop dnsmasq, clear leases, restart dnsmasq
-                var (stopSuccess, stopOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "stop", "dnsmasq" });
+                // Stop dnsmasq
+                _logger.LogInformation("Stopping dnsmasq for lease clearing...");
+                await RunHostServiceCommand("dnsmasq", "stop");
                 
+                // Clear leases
                 try
                 {
                     var leaseFile = "/var/lib/misc/dnsmasq.leases";
-                    if (File.Exists(leaseFile)) File.Delete(leaseFile);
+                    if (File.Exists(leaseFile)) 
+                    {
+                        File.Delete(leaseFile);
+                        _logger.LogInformation("Deleted leases file {File}", leaseFile);
+                    }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to delete leases file");
+                }
 
-                var (startSuccess, startOut) = await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "start", "dnsmasq" });
+                // Clear dnsmasq cache (files in /var/lib/dnsmasq/)
+                try
+                {
+                    var dnsmasqDbDir = "/var/lib/dnsmasq";
+                    if (Directory.Exists(dnsmasqDbDir))
+                    {
+                         var files = Directory.GetFiles(dnsmasqDbDir);
+                         foreach (var file in files)
+                         {
+                             try { File.Delete(file); } catch { }
+                         }
+                         _logger.LogInformation("Cleared dnsmasq cache directory");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to clear dnsmasq cache");
+                }
+
+                // Start dnsmasq
+                _logger.LogInformation("Starting dnsmasq...");
+                var startSuccess = await RunHostServiceCommand("dnsmasq", "start");
+                if (!startSuccess)
+                {
+                     _logger.LogError("Failed to start dnsmasq after IP update");
+                     // Try one more restart
+                     await RunHostServiceCommand("dnsmasq", "restart");
+                }
                 
-                await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/killall", "-USR1", "dnsmasq" });
+                // Signal reload just in case
+                await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/killall", "-USR1", "dnsmasq" }, logFailure: false);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to update DHCP range for new eth1 IP");
             }
-
-            // Reload dnsmasq for changes to take effect if it's acting as a server
-            await _processRunner.RunCommandAsync(new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", "restart", "dnsmasq" });
 
             return new { success = true };
         }
@@ -409,9 +462,13 @@ public class SystemManager : ISystemManager
 
     private string CidrToSubnetMask(int cidr)
     {
-        uint ip = 0;
-        for (int i = 0; i < cidr; i++) ip = (ip >> 1) | 0x80000000;
-        return new IPAddress(BitConverter.GetBytes(ip)).ToString();
+        // Safe, endian-neutral implementation
+        byte[] bytes = new byte[4];
+        for (int i = 0; i < cidr; i++)
+        {
+            bytes[i / 8] |= (byte)(1 << (7 - (i % 8)));
+        }
+        return new IPAddress(bytes).ToString();
     }
 
     private int SubnetMaskToCidr(string subnetMask)
@@ -435,5 +492,43 @@ public class SystemManager : ISystemManager
         {
             return -1; // Invalid mask
         }
+    }
+
+    /// <summary>
+    /// Runs a service command on the host using multiple fallback methods via nsenter.
+    /// Methods: init.d -> service -> systemctl
+    /// </summary>
+    private async Task<bool> RunHostServiceCommand(string serviceName, string action)
+    {
+        // Method 1: init.d (via nsenter)
+        var (success, output) = await _processRunner.RunCommandAsync(
+            new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", $"/etc/init.d/{serviceName}", action }, 
+            logFailure: false
+        );
+
+        if (success) return true;
+        _logger.LogDebug("Failed {Service} {Action} with init.d: {Output}", serviceName, action, output);
+
+        // Method 2: service command (via nsenter)
+        (success, output) = await _processRunner.RunCommandAsync(
+            new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "service", serviceName, action }, 
+            logFailure: false
+        );
+
+        if (success) return true;
+        _logger.LogDebug("Failed {Service} {Action} with service command: {Output}", serviceName, action, output);
+
+        // Method 3: systemctl (via nsenter)
+        (success, output) = await _processRunner.RunCommandAsync(
+            new[] { "nsenter", "-t", "1", "-m", "-u", "-n", "-i", "/usr/bin/systemctl", action, serviceName }, 
+            logFailure: true // Log failure on last attempt
+        );
+
+        if (!success)
+        {
+            _logger.LogError("Failed {Service} {Action} with all methods. Last error: {Output}", serviceName, action, output);
+        }
+
+        return success;
     }
 }
