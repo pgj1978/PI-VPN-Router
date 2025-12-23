@@ -290,82 +290,97 @@ public class SystemManager : ISystemManager
                  _logger.LogWarning(ex, "Error cleaning static leases");
             }
 
-            // Persist the IP by updating /etc/dhcpcd.conf if possible
+            // Persist the IP
+            // Priority 1: systemd-networkd
             try
             {
-                var dhcpcdFile = ETH1_NETWORK_CONFIG_FILE;
-                var ipWithCidr = $"{ipAddress}/{cidr}";
-
-                if (File.Exists(dhcpcdFile))
+                var systemdNetworkFile = "/etc/systemd/network/10-eth1.network";
+                if (File.Exists(systemdNetworkFile))
                 {
-                    var lines = (await File.ReadAllLinesAsync(dhcpcdFile)).ToList();
-                    var newLines = new List<string>();
-                    bool inEth1 = false;
-                    bool wroteStatic = false;
+                    var content = $"[Match]\nName=eth1\n\n[Network]\nAddress={ipAddress}/{cidr}\n";
+                    await File.WriteAllTextAsync(systemdNetworkFile, content);
+                    _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", systemdNetworkFile, $"{ipAddress}/{cidr}");
 
-                    for (int i = 0; i < lines.Count; i++)
+                    bool persistSuccess = await RunHostServiceCommand("systemd-networkd", "restart");
+                    if (!persistSuccess) _logger.LogWarning("Failed to restart systemd-networkd");
+                }
+                // Priority 2: dhcpcd (Legacy / Raspberry Pi OS default before Bookworm)
+                else
+                {
+                    var dhcpcdFile = ETH1_NETWORK_CONFIG_FILE;
+                    var ipWithCidr = $"{ipAddress}/{cidr}";
+
+                    if (File.Exists(dhcpcdFile))
                     {
-                        var line = lines[i];
-                        if (line.Trim().StartsWith("interface eth1"))
-                        {
-                            inEth1 = true;
-                            newLines.Add(line);
-                            continue;
-                        }
+                        var lines = (await File.ReadAllLinesAsync(dhcpcdFile)).ToList();
+                        var newLines = new List<string>();
+                        bool inEth1 = false;
+                        bool wroteStatic = false;
 
-                        if (inEth1)
+                        for (int i = 0; i < lines.Count; i++)
                         {
-                            if (line.Trim().StartsWith("interface "))
+                            var line = lines[i];
+                            if (line.Trim().StartsWith("interface eth1"))
                             {
-                                if (!wroteStatic)
-                                {
-                                    newLines.Add($"static ip_address={ipWithCidr}");
-                                    wroteStatic = true;
-                                }
-                                inEth1 = false;
+                                inEth1 = true;
                                 newLines.Add(line);
                                 continue;
                             }
 
-                            if (line.Trim().StartsWith("static ip_address="))
+                            if (inEth1)
                             {
-                                if (!wroteStatic)
+                                if (line.Trim().StartsWith("interface "))
                                 {
-                                    newLines.Add($"static ip_address={ipWithCidr}");
-                                    wroteStatic = true;
+                                    if (!wroteStatic)
+                                    {
+                                        newLines.Add($"static ip_address={ipWithCidr}");
+                                        wroteStatic = true;
+                                    }
+                                    inEth1 = false;
+                                    newLines.Add(line);
+                                    continue;
                                 }
-                                continue;
+
+                                if (line.Trim().StartsWith("static ip_address="))
+                                {
+                                    if (!wroteStatic)
+                                    {
+                                        newLines.Add($"static ip_address={ipWithCidr}");
+                                        wroteStatic = true;
+                                    }
+                                    continue;
+                                }
                             }
+
+                            newLines.Add(line);
                         }
 
-                        newLines.Add(line);
-                    }
+                        if (!wroteStatic)
+                        {
+                            newLines.Add("");
+                            newLines.Add("interface eth1");
+                            newLines.Add($"static ip_address={ipWithCidr}");
+                        }
 
-                    if (!wroteStatic)
+                        await File.WriteAllLinesAsync(dhcpcdFile, newLines);
+                        _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
+
+                        // Restart dhcpcd using robust method
+                        await RunHostServiceCommand("dhcpcd", "restart");
+                    }
+                    else
                     {
-                        newLines.Add("");
-                        newLines.Add("interface eth1");
-                        newLines.Add($"static ip_address={ipWithCidr}");
+                        // If file doesn't exist, create it (assuming dhcpcd system)
+                        var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
+                        await File.WriteAllTextAsync(dhcpcdFile, content);
+                        _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
+                        await RunHostServiceCommand("dhcpcd", "restart");
                     }
-
-                    await File.WriteAllLinesAsync(dhcpcdFile, newLines);
-                    _logger.LogInformation("Updated {File} with persistent eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
-
-                    // Restart dhcpcd using robust method
-                    await RunHostServiceCommand("dhcpcd", "restart");
-                }
-                else
-                {
-                    // If file doesn't exist, create it
-                    var content = $"interface eth1\nstatic ip_address={ipAddress}/{cidr}\n";
-                    await File.WriteAllTextAsync(dhcpcdFile, content);
-                    _logger.LogInformation("Created {File} with eth1 IP {Ip}", dhcpcdFile, ipWithCidr);
-                    await RunHostServiceCommand("dhcpcd", "restart");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to persist eth1 IP to dhcpcd.conf");
+                _logger.LogWarning(ex, "Failed to persist eth1 IP configuration");
             }
 
             // Update DHCP range to match new subnet

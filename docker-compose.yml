@@ -31,6 +31,7 @@ services:
       - /etc/dnsmasq.conf:/etc/dnsmasq.conf
       - /etc/dnsmasq.d:/etc/dnsmasq.d
       - /etc/network:/etc/network
+      - /etc/systemd/network:/etc/systemd/network
       - /etc/dhcpcd.conf:/etc/dhcpcd.conf
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
