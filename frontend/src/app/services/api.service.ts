@@ -11,8 +11,8 @@ export interface VpnConfig {
 
 export interface VpnStatus {
   connected: boolean;
-  interface: string | null;
-  details: string | null;
+  profile: string | null;
+  interface_name: string | null;
 }
 
 export interface Device {

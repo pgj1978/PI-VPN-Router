@@ -1,0 +1,160 @@
+<div class="container">
+  <header>
+    <h1>VPN Manager</h1>
+    <div class="status-badge" [style.background-color]="getStatusColor()">
+      {{ getStatusText() }}
+    </div>
+  </header>
+
+  @if (message) {
+    <div class="message">{{ message }}</div>
+  }
+
+  <div class="tabs">
+    <button class="tab-btn" [class.active]="activeTab === 'connections'" (click)="setActiveTab('connections')">
+      VPN Connections
+    </button>
+    <button class="tab-btn" [class.active]="activeTab === 'devices'" (click)="setActiveTab('devices')">
+      Connected Devices
+    </button>
+    <button class="tab-btn" [class.active]="activeTab === 'bypass'" (click)="setActiveTab('bypass')">
+      Domain Bypass
+    </button>
+  </div>
+
+  <div class="tab-content">
+    @if (loading) {
+      <div class="loading">Processing...</div>
+    }
+
+    <!-- Tab 1: VPN Connections -->
+    @if (activeTab === 'connections') {
+      <div class="panel">
+        <h2>VPN Profiles</h2>
+        <p class="panel-description">Manage your WireGuard connections.</p>
+
+        <!-- Kill Switch Toggle -->
+        <div class="kill-switch-container">
+          <label class="toggle kill-switch">
+            <input
+              type="checkbox"
+              [checked]="killSwitchEnabled"
+              (change)="toggleKillSwitch($event)">
+            <span class="toggle-label">
+              🛡️ Kill Switch {{killSwitchEnabled ? 'ON' : 'OFF'}}
+            </span>
+          </label>
+          <p class="help-text">Block internet if VPN disconnects</p>
+        </div>
+
+        @if (vpnStatus?.connected) {
+          <button class="btn btn-danger btn-disconnect" (click)="disconnectVpn()" [disabled]="loading">
+            Disconnect VPN
+          </button>
+        }
+
+        <div class="vpn-list">
+          @for (config of vpnConfigs; track config.name) {
+            <div class="vpn-item">
+              <div class="vpn-info">
+                <strong>{{ config.name }}</strong>
+                @if (config.active) {
+                  <span class="badge-active">Active</span>
+                }
+              </div>
+              <button
+                class="btn btn-primary"
+                (click)="connectVpn(config.name)"
+                [disabled]="loading || config.active">
+                Connect
+              </button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Tab 2: Connected Devices -->
+    @if (activeTab === 'devices') {
+      <div class="panel full-width">
+        <h2>Connected Devices</h2>
+        <p class="panel-description">Control which devices route through the VPN vs. ISP.</p>
+
+        <div class="device-list">
+          @for (device of devices; track device.mac) {
+            <div class="device-item">
+              <div class="device-info">
+                <strong>{{ device.hostname || device.ip }}</strong>
+                <span class="device-details">{{ device.ip }} ({{ device.mac }})</span>
+              </div>
+              <label class="toggle">
+                <input
+                  type="checkbox"
+                  [checked]="device.bypass_vpn"
+                  (change)="toggleDeviceBypass(device)">
+                <span class="toggle-label">
+                 Bypass VPN
+                </span>
+              </label>
+            </div>
+          } @empty {
+            <p class="empty-state">No devices connected</p>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Tab 3: Domain Bypass -->
+    @if (activeTab === 'bypass') {
+      <div class="panel full-width">
+        <h2>Domain Bypass (Split Tunneling)</h2>
+        <p class="panel-description">Traffic to these domains will bypass the VPN.</p>
+
+        <!-- Add Domain Form -->
+        <div class="add-domain-form">
+          <input
+            type="text"
+            placeholder="example.com"
+            [(ngModel)]="newDomain"
+            (keyup.enter)="addDomain()"
+            class="domain-input">
+          <button class="btn btn-primary" (click)="addDomain()" [disabled]="!newDomain || loading">
+            Add Domain
+          </button>
+        </div>
+
+        <!-- Domain List -->
+        <div class="domain-list">
+          @for (domain of bypassDomains; track domain.domain) {
+            <div class="domain-item">
+              <span class="domain-name">{{ domain.domain }}</span>
+              <button class="btn btn-small btn-danger" (click)="removeDomain(domain.domain)" [disabled]="loading">
+                Remove
+              </button>
+            </div>
+          } @empty {
+            <p class="empty-state">No domains configured</p>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+<!-- Logs Modal -->
+@if (showLogs) {
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>{{ connectionTitle }}</h3>
+        <button class="close-btn" (click)="closeLogs()">×</button>
+      </div>
+      <div class="modal-body">
+        <pre class="log-output">{{ connectionLogs }}</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" (click)="closeLogs()">Close</button>
+      </div>
+    </div>
+  </div>
+}
