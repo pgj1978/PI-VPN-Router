@@ -22,6 +22,11 @@ export class DashboardComponent implements OnInit {
   newDomain = '';
   loading = false;
   message: string | null = null;
+  
+  // Connection Logs
+  showLogs = false;
+  connectionLogs = '';
+  connectionTitle = '';
 
   constructor(private apiService: ApiService) {}
 
@@ -41,6 +46,8 @@ export class DashboardComponent implements OnInit {
         error: (err) => console.error('Error fetching VPN status:', err)
       });
   }
+
+  // ... (load methods unchanged)
 
   loadVpnConfigs() {
     this.apiService.getVpnConfigs().subscribe({
@@ -68,17 +75,39 @@ export class DashboardComponent implements OnInit {
 
   connectVpn(configName: string) {
     this.loading = true;
+    this.connectionTitle = `Connecting to ${configName}...`;
+    this.connectionLogs = 'Initiating connection request...';
+    this.showLogs = true; // Show modal immediately
+
     this.apiService.connectVpn(configName).subscribe({
-      next: () => {
-        this.showMessage(`Connected to ${configName}`, 'success');
+      next: (res: any) => {
         this.loading = false;
-        this.loadVpnConfigs();
+        if (res.logs) {
+            this.connectionLogs = res.logs;
+        } else {
+            this.connectionLogs = "Connection successful (No output captured).";
+        }
+        
+        if (res.success) {
+            this.connectionTitle = `Connected to ${configName}`;
+            this.showMessage(`Connected to ${configName}`, 'success');
+            this.loadVpnConfigs();
+        } else {
+            this.connectionTitle = `Connection Failed`;
+        }
       },
       error: (err) => {
-        this.showMessage('Error connecting: ' + err.message, 'error');
         this.loading = false;
+        this.connectionTitle = `Error Connecting to ${configName}`;
+        this.connectionLogs = err.error?.logs || err.message;
+        this.showMessage('Error connecting: ' + err.message, 'error');
       }
     });
+  }
+
+  closeLogs() {
+    this.showLogs = false;
+    this.connectionLogs = '';
   }
 
   disconnectVpn() {

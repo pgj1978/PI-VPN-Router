@@ -1,68 +1,89 @@
-/* Layout */
 .panels {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: 24px;
 }
 
-/* Domain Bypass Panel - specific layout */
-@media (min-width: 1024px) {
-  .panels > .panel:last-child:nth-child(odd) {
-    grid-column: 1 / -1;
-  }
+/* Kill Switch */
+.kill-switch-container {
+  background-color: #f3f4f6;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 24px;
+  border: 1px solid #e5e7eb;
 }
 
-/* Full width disconnect button */
+.help-text {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-left: 56px; /* Align with toggle text */
+}
+
+/* VPN List */
+.vpn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.vpn-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background-color: #f9fafb;
+  border: 1px solid #f3f4f6;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+
+.vpn-item:hover {
+  border-color: #d1d5db;
+}
+
+.vpn-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.badge-active {
+  display: inline-block;
+  background-color: #dcfce7;
+  color: #166534;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  width: fit-content;
+}
+
 .btn-disconnect {
   width: 100%;
-  margin-top: 12px;
-  margin-bottom: 24px;
-  padding: 10px;
+  margin-bottom: 20px;
 }
 
-/* Lists */
-.vpn-list, .device-list, .domain-list {
+/* Device List */
+.device-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.vpn-item, .device-item, .domain-item {
+.device-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  background: #f9fafb;
-  border: 1px solid #f3f4f6;
-  border-radius: 8px;
-  transition: background-color 0.2s;
+  padding: 12px 0;
+  border-bottom: 1px solid #f3f4f6;
 }
 
-.vpn-item:hover, .device-item:hover, .domain-item:hover {
-  background-color: #f3f4f6;
-  border-color: #e5e7eb;
+.device-item:last-child {
+  border-bottom: none;
 }
 
-/* VPN Items */
-.vpn-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.badge-active {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  background-color: #d1fae5;
-  color: #065f46;
-  border-radius: 9999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  margin-top: 4px;
-  width: fit-content;
-}
-
-/* Device Items */
 .device-info {
   display: flex;
   flex-direction: column;
@@ -70,28 +91,14 @@
 
 .device-details {
   font-size: 0.75rem;
-  color: #6b7280;
-  margin-top: 2px;
+  color: #9ca3af;
 }
 
-/* Domain Items */
-.domain-item {
-  padding: 8px 8px 8px 16px; /* Tighter padding for domains */
-}
-
-.domain-name {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 0.85rem;
-  color: #374151;
-  word-break: break-all;
-  margin-right: 12px;
-}
-
-/* Inputs & Forms */
+/* Domain Bypass */
 .add-domain-form {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .domain-input {
@@ -100,31 +107,124 @@
   border: 1px solid #d1d5db;
   border-radius: 6px;
   font-size: 0.875rem;
-  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-.domain-input:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+.domain-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* Kill Switch */
-.kill-switch-container {
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 24px;
+.domain-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background-color: #f9fafb;
+  border-radius: 6px;
 }
 
-/* Kill Switch specific toggle color */
-.kill-switch input[type="checkbox"]:checked {
-  background-color: #d97706; /* Amber-600 */
+.domain-name {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #374151;
 }
 
-.help-text {
-  margin-top: 8px;
-  font-size: 0.75rem;
-  color: #92400e;
+/* Log Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f9fafb;
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #4b5563;
+  background-color: #e5e7eb;
+}
+
+.modal-body {
+  padding: 0;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #111827; /* Dark background for logs */
+}
+
+.log-output {
+  background-color: #111827;
+  color: #4ade80; /* Bright green */
+  padding: 24px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e5e7eb;
+  text-align: right;
+  background-color: white;
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
 }

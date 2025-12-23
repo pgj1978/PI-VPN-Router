@@ -119,3 +119,21 @@
     </div>
   </div>
 </div>
+
+<!-- Logs Modal -->
+@if (showLogs) {
+  <div class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>{{ connectionTitle }}</h3>
+        <button class="close-btn" (click)="closeLogs()">×</button>
+      </div>
+      <div class="modal-body">
+        <pre class="log-output">{{ connectionLogs }}</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" (click)="closeLogs()">Close</button>
+      </div>
+    </div>
+  </div>
+}

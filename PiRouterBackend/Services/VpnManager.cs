@@ -4,6 +4,7 @@ namespace PiRouterBackend.Services;
 
 public interface IVpnManager
 {
+    Task Initialize();
     Task<object> ListVpnConfigs();
     Task<object> GetVpnStatus();
     Task<object> ConnectVpn(string profileName);
@@ -25,6 +26,42 @@ public class VpnManager : IVpnManager
         _processRunner = processRunner;
         _configManager = configManager;
         _logger = logger;
+    }
+
+    public async Task Initialize()
+    {
+        try
+        {
+            _logger.LogInformation("Initializing VpnManager...");
+            var config = _configManager.LoadConfig();
+
+            if (!string.IsNullOrEmpty(config.ActiveVpn))
+            {
+                _logger.LogInformation("Found active VPN profile in config: {Profile}", config.ActiveVpn);
+
+                // Check if already running
+                var (success, output) = await _processRunner.RunCommandAsync(new[] { "wg", "show", WG_INTERFACE }, useSudo: false);
+                if (success && !string.IsNullOrWhiteSpace(output))
+                {
+                    _logger.LogInformation("VPN interface {Interface} is already up.", WG_INTERFACE);
+                    return;
+                }
+
+                _logger.LogInformation("Restoring VPN connection to {Profile}...", config.ActiveVpn);
+                
+                // Attempt to connect
+                var result = await ConnectVpn(config.ActiveVpn);
+                // We don't really do anything with the result object here, but logs will show what happened
+            }
+            else
+            {
+                 _logger.LogInformation("No active VPN profile configured.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error initializing VPN manager");
+        }
     }
 
     public async Task<object> ListVpnConfigs()
@@ -186,14 +223,14 @@ public class VpnManager : IVpnManager
             }
 
             // 3. Bring up the interface
-            var (upSuccess, upError) = await _processRunner.RunCommandAsync(
+            var (upSuccess, upOutput) = await _processRunner.RunCommandAsync(
                 new[] { "wg-quick", "up", WG_INTERFACE },
                 useSudo: false
             );
 
             if (!upSuccess)
             {
-                return new { success = false, error = $"Failed to bring up interface: {upError}" };
+                return new { success = false, error = $"Failed to bring up interface: {upOutput}", logs = upOutput };
             }
 
             // 4. Update config
@@ -201,12 +238,12 @@ public class VpnManager : IVpnManager
             routerConfig.ActiveVpn = profileName;
             await _configManager.SaveConfigAsync(routerConfig);
 
-            return new { success = true, profile = profileName };
+            return new { success = true, profile = profileName, logs = upOutput };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error connecting to VPN");
-            return new { success = false, error = ex.Message };
+            return new { success = false, error = ex.Message, logs = ex.ToString() };
         }
     }
 

@@ -40,6 +40,7 @@ public class Program
         {
             var domainManager = scope.ServiceProvider.GetRequiredService<IDomainManager>();
             var deviceManager = scope.ServiceProvider.GetRequiredService<IDeviceManager>();
+            var vpnManager = scope.ServiceProvider.GetRequiredService<IVpnManager>();
             var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
             
             try
@@ -63,6 +64,15 @@ public class Program
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Error initializing DeviceManager");
+                    }
+
+                    try
+                    {
+                        await vpnManager.Initialize();
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error initializing VpnManager");
                     }
                 });
                 
