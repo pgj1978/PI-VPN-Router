@@ -1,6 +1,40 @@
 .app-layout {
   display: flex;
   min-height: 100vh;
+  flex-direction: column; /* Changed for mobile header flow, but desktop overrides */
+}
+
+/* Mobile Header */
+.mobile-header {
+  display: none; /* Hidden on desktop */
+  background: #1a1a2e;
+  color: white;
+  padding: 15px 20px;
+  align-items: center;
+  gap: 15px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900; /* Below sidebar (1000) but above content */
+  height: 60px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.mobile-menu-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.mobile-title {
+  font-size: 1.2rem;
+  font-weight: 700;
 }
 
 .main-content {
@@ -9,15 +43,41 @@
   margin-left: 280px; /* Default sidebar width */
   transition: margin-left 0.3s ease;
   min-height: 100vh;
+  position: relative; /* For backdrop positioning if needed */
 }
 
 .main-content.expanded {
   margin-left: 70px; /* Collapsed sidebar width */
 }
 
+/* Backdrop */
+.backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 950; /* Between header (900) and sidebar (1000) */
+  backdrop-filter: blur(2px);
+}
+
+/* Desktop styles override flex-direction */
+@media (min-width: 769px) {
+  .app-layout {
+    flex-direction: row;
+  }
+}
+
+/* Mobile Styles */
 @media (max-width: 768px) {
+  .mobile-header {
+    display: flex;
+  }
+
   .main-content {
-    margin-left: 0;
-    padding-top: 60px; /* Space for mobile header if needed, or sidebar pushes content */
+    margin-left: 0 !important; /* Force no margin */
+    padding-top: 60px; /* Space for header */
+    width: 100%;
   }
 }

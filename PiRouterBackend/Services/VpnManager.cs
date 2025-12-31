@@ -43,7 +43,8 @@ public class VpnManager : IVpnManager
                 var (success, output) = await _processRunner.RunCommandAsync(new[] { "wg", "show", WG_INTERFACE }, useSudo: false);
                 if (success && !string.IsNullOrWhiteSpace(output))
                 {
-                    _logger.LogInformation("VPN interface {Interface} is already up.", WG_INTERFACE);
+                    _logger.LogInformation("VPN interface {Interface} is already up. Ensuring routing exceptions are applied.", WG_INTERFACE);
+                    await ApplyRoutingExceptions();
                     return;
                 }
 
@@ -233,6 +234,10 @@ public class VpnManager : IVpnManager
                 return new { success = false, error = $"Failed to bring up interface: {upOutput}", logs = upOutput };
             }
 
+            // 3.5 Apply Local Routing Exceptions
+            // Prevents local LAN and Docker traffic from being captured by wg-quick's routing table (51820)
+            await ApplyRoutingExceptions();
+
             // 4. Update config
             var routerConfig = _configManager.LoadConfig();
             routerConfig.ActiveVpn = profileName;
@@ -339,6 +344,22 @@ public class VpnManager : IVpnManager
         {
             _logger.LogError(ex, "Error deleting VPN profile");
             return new { success = false, error = ex.Message };
+        }
+    }
+
+    private async Task ApplyRoutingExceptions()
+    {
+        try
+        {
+            _logger.LogInformation("Applying routing exceptions for local networks...");
+            // Exclude Docker ranges (172.16.0.0/12 covers 172.16-172.31)
+            await _processRunner.RunCommandAsync(new[] { "ip", "route", "add", "throw", "172.16.0.0/12", "table", "51820" }, logFailure: false);
+            // Exclude LAN ranges
+            await _processRunner.RunCommandAsync(new[] { "ip", "route", "add", "throw", "192.168.0.0/16", "table", "51820" }, logFailure: false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to apply routing exceptions");
         }
     }
 }

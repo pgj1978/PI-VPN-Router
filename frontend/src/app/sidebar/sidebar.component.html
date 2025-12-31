@@ -1,4 +1,4 @@
-<div class="sidebar" [class.collapsed]="!menuOpen">
+<div class="sidebar" [class.collapsed]="!menuOpen" [class.mobile-open]="mobileOpen">
   <div class="sidebar-header">
     <h2 class="sidebar-logo">
       <span class="logo-icon">🛡️</span>
@@ -12,25 +12,25 @@
   <nav class="sidebar-nav">
     <ul>
       <li>
-        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-link">
+        <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" class="nav-link" (click)="onMobileLinkClick()">
           <span class="nav-icon">📊</span>
           <span class="nav-text">Dashboard</span>
         </a>
       </li>
       <li>
-        <a routerLink="/vpn" routerLinkActive="active" class="nav-link">
+        <a routerLink="/vpn" routerLinkActive="active" class="nav-link" (click)="onMobileLinkClick()">
           <span class="nav-icon">🛡️</span>
           <span class="nav-text">VPN</span>
         </a>
       </li>
       <li>
-        <a routerLink="/routing" routerLinkActive="active" class="nav-link">
+        <a routerLink="/routing" routerLinkActive="active" class="nav-link" (click)="onMobileLinkClick()">
           <span class="nav-icon">🔀</span>
           <span class="nav-text">Routing</span>
         </a>
       </li>
       <li>
-        <a routerLink="/system" routerLinkActive="active" class="nav-link">
+        <a routerLink="/system" routerLinkActive="active" class="nav-link" (click)="onMobileLinkClick()">
           <span class="nav-icon">⚙️</span>
           <span class="nav-text">System</span>
         </a>

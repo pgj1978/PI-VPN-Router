@@ -5,6 +5,18 @@
   margin-bottom: 24px;
   border-bottom: 1px solid #e5e7eb;
   padding-bottom: 2px;
+  overflow-x: auto; /* Enable horizontal scroll */
+  white-space: nowrap; /* Prevent wrapping */
+  -webkit-overflow-scrolling: touch; /* Smooth scroll on iOS */
+}
+
+.tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tabs::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
 }
 
 .tab-btn {
@@ -16,6 +28,7 @@
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
+  flex-shrink: 0; /* Don't shrink buttons */
 }
 
 .tab-btn:hover {

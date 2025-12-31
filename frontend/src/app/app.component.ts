@@ -13,8 +13,17 @@ import { SidebarComponent } from './sidebar/sidebar.component';
 export class AppComponent {
   title = 'PiRouter VPN Manager';
   sidebarOpen = true;
+  mobileMenuOpen = false;
 
   onSidebarToggle(isOpen: boolean) {
     this.sidebarOpen = isOpen;
+  }
+
+  toggleMobileMenu() {
+    this.mobileMenuOpen = !this.mobileMenuOpen;
+  }
+
+  closeMobileMenu() {
+    this.mobileMenuOpen = false;
   }
 }
