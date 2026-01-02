@@ -347,15 +347,94 @@ public class VpnManager : IVpnManager
         }
     }
 
+    private async Task<string> GetWireGuardTableId()
+    {
+        try 
+        {
+            // Use sudo because wg usually requires it
+            var (success, output) = await _processRunner.RunCommandAsync(new[] { "wg", "show", WG_INTERFACE, "fwmark" }, useSudo: true);
+            if (success && !string.IsNullOrWhiteSpace(output))
+            {
+                var val = output.Trim();
+                if (val.Equals("off", StringComparison.OrdinalIgnoreCase)) return "51820";
+                
+                if (val.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                {
+                    try 
+                    {
+                        return Convert.ToInt32(val, 16).ToString();
+                    }
+                    catch 
+                    {
+                        _logger.LogWarning("Failed to parse fwmark hex: {Value}", val);
+                    }
+                }
+                if (int.TryParse(val, out _)) return val;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to determine WireGuard table ID, defaulting to 51820");
+        }
+        return "51820";
+    }
+
     private async Task ApplyRoutingExceptions()
     {
         try
         {
-            _logger.LogInformation("Applying routing exceptions for local networks...");
+            var tableId = await GetWireGuardTableId();
+            _logger.LogInformation("Applying routing exceptions for local networks to Table {TableId}...", tableId);
+            
             // Exclude Docker ranges (172.16.0.0/12 covers 172.16-172.31)
-            await _processRunner.RunCommandAsync(new[] { "ip", "route", "add", "throw", "172.16.0.0/12", "table", "51820" }, logFailure: false);
+            await _processRunner.RunCommandAsync(new[] { "ip", "route", "add", "throw", "172.16.0.0/12", "table", tableId }, logFailure: false);
             // Exclude LAN ranges
-            await _processRunner.RunCommandAsync(new[] { "ip", "route", "add", "throw", "192.168.0.0/16", "table", "51820" }, logFailure: false);
+            await _processRunner.RunCommandAsync(new[] { "ip", "route", "add", "throw", "192.168.0.0/16", "table", tableId }, logFailure: false);
+
+            // Shift WireGuard rule priority to 20000 to allow Bypass (Priority 1) to take precedence
+            // wg-quick adds: not from all fwmark <mark> lookup <tableId> (default priority 0)
+            // We want:       not from all fwmark <mark> lookup <tableId> priority 20000
+            
+            _logger.LogInformation("Shifting WireGuard rule priority to 20000 to allow bypass...");
+            
+            // Add lower priority rule first
+            await _processRunner.RunCommandAsync(new[] { 
+                "ip", "rule", "add", "not", "fwmark", tableId, "lookup", tableId, "priority", "20000" 
+            }, logFailure: false);
+
+            // Remove default high priority rule (priority 0)
+            await _processRunner.RunCommandAsync(new[] { 
+                "ip", "rule", "del", "not", "fwmark", tableId, "lookup", tableId, "priority", "0" 
+            }, logFailure: false);
+
+            // Fix MTU/MSS issues for clients routed through VPN
+            // Explicitly set MSS to 1360 (safe for WireGuard 1420 MTU) to prevent black holes
+            // Apply to multiple chains to ensure coverage for all traffic patterns
+            _logger.LogInformation("Applying explicit TCP MSS clamping to 1360 on all relevant chains...");
+            
+            // FORWARD chain - for traffic passing through the router (LAN devices via VPN)
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-D", "FORWARD", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1360"
+            }, logFailure: false);
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-I", "FORWARD", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1360"
+            });
+
+            // OUTPUT chain - for traffic originated from Pi itself
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-D", "OUTPUT", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1360"
+            }, logFailure: false);
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-I", "OUTPUT", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1360"
+            });
+
+            // POSTROUTING chain - for return traffic (ensures symmetry)
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-D", "POSTROUTING", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1360"
+            }, logFailure: false);
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-I", "POSTROUTING", "-p", "tcp", "--tcp-flags", "SYN,RST", "SYN", "-j", "TCPMSS", "--set-mss", "1360"
+            });
         }
         catch (Exception ex)
         {

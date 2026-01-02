@@ -508,12 +508,23 @@ public class DeviceManager : IDeviceManager
             {
                 _logger.LogInformation("Removing bypass for device {Mac} ({Ip})", mac, ip);
 
-                await _processRunner.RunCommandAsync(new[] {
+                // Remove the bypass MARK rule - this is critical!
+                var (markDeleted, markOutput) = await _processRunner.RunCommandAsync(new[] {
                     "iptables", "-t", "mangle", "-D", "PREROUTING", 
                     "-i", LAN_IFACE, "-s", ip, "!", "-d", piLanIp,
                     "-j", "MARK", "--set-mark", BYPASS_TABLE
                 }, logFailure: false);
+                
+                if (markDeleted)
+                {
+                    _logger.LogInformation("Successfully removed MARK rule for {Mac}", mac);
+                }
+                else
+                {
+                    _logger.LogWarning("Failed to remove MARK rule for {Mac}. Output: {Output}", mac, markOutput);
+                }
 
+                // Remove bypass-specific rules (LAN to WAN)
                 await _processRunner.RunCommandAsync(new[] {
                     "iptables", "-D", "FORWARD", "-i", LAN_IFACE, "-o", WAN_IFACE, "-s", ip, "-j", "ACCEPT"
                 }, logFailure: false);
@@ -527,6 +538,27 @@ public class DeviceManager : IDeviceManager
                     "iptables", "-D", "FORWARD", "-i", WAN_IFACE, "-o", LAN_IFACE, "-d", ip, 
                     "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT"
                 }, logFailure: false);
+
+                // Add VPN-specific rules (LAN to VPN/wg0) when bypass is disabled
+                _logger.LogInformation("Adding VPN routing rules for device {Mac} ({Ip})", mac, ip);
+                
+                // Allow traffic from device to VPN interface
+                await _processRunner.RunCommandAsync(new[] {
+                    "iptables", "-D", "FORWARD", "-i", LAN_IFACE, "-o", "wg0", "-s", ip, "-j", "ACCEPT"
+                }, logFailure: false);
+                await _processRunner.RunCommandAsync(new[] {
+                    "iptables", "-A", "FORWARD", "-i", LAN_IFACE, "-o", "wg0", "-s", ip, "-j", "ACCEPT"
+                });
+
+                // Allow return traffic from VPN to device
+                await _processRunner.RunCommandAsync(new[] {
+                    "iptables", "-D", "FORWARD", "-i", "wg0", "-o", LAN_IFACE, "-d", ip, 
+                    "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT"
+                }, logFailure: false);
+                await _processRunner.RunCommandAsync(new[] {
+                    "iptables", "-A", "FORWARD", "-i", "wg0", "-o", LAN_IFACE, "-d", ip, 
+                    "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT"
+                });
             }
 
             await _processRunner.RunCommandAsync(new[] { "ip", "route", "flush", "cache" });
