@@ -462,6 +462,28 @@ public class DeviceManager : IDeviceManager
             }
 
             var piLanIp = await GetPiLanIpAsync();
+            
+            // CRITICAL: Remove ALL MARK rules for this device IP (with any destination)
+            // When the Pi's IP changes, old rules with incorrect gateway IPs persist
+            // causing bypass to always be "on" regardless of toggle setting
+            _logger.LogInformation("Cleaning up all existing MARK rules for device {Mac} ({Ip})", mac, ip);
+            
+            // Remove rule with current Pi LAN IP
+            await _processRunner.RunCommandAsync(new[] {
+                "iptables", "-t", "mangle", "-D", "PREROUTING", 
+                "-i", LAN_IFACE, "-s", ip, "!", "-d", piLanIp,
+                "-j", "MARK", "--set-mark", BYPASS_TABLE
+            }, logFailure: false);
+            
+            // Remove rule with fallback/hardcoded IP (handles IP change scenario)
+            if (piLanIp != PI_LAN_IP)
+            {
+                await _processRunner.RunCommandAsync(new[] {
+                    "iptables", "-t", "mangle", "-D", "PREROUTING", 
+                    "-i", LAN_IFACE, "-s", ip, "!", "-d", PI_LAN_IP,
+                    "-j", "MARK", "--set-mark", BYPASS_TABLE
+                }, logFailure: false);
+            }
 
             if (bypass)
             {
