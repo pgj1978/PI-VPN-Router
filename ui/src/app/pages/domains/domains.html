@@ -1,0 +1,65 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>Domain bypass</h1>
+      <p class="subtitle">
+        Traffic to these hostnames goes straight out to the internet. Everything else uses the VPN.
+      </p>
+    </div>
+    <button mat-stroked-button (click)="refresh()" [disabled]="working()" matTooltip="Re-resolve every domain now">
+      <mat-icon>refresh</mat-icon>
+      Re-resolve
+    </button>
+  </div>
+
+  <mat-card class="add">
+    <mat-card-content>
+      <form class="add-row" (submit)="$event.preventDefault(); add()">
+        <mat-form-field appearance="outline" class="grow">
+          <mat-label>Hostname</mat-label>
+          <input
+            matInput
+            [ngModel]="newDomain()"
+            (ngModelChange)="newDomain.set($event)"
+            name="domain"
+            placeholder="example.com"
+            autocomplete="off" />
+          <mat-hint>Resolved when you add it, then re-checked periodically</mat-hint>
+        </mat-form-field>
+        <button mat-flat-button type="submit" [disabled]="!newDomain().trim() || working()">
+          <mat-icon>add</mat-icon>
+          Add
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <mat-card>
+    @if (store.domains().length === 0) {
+      <div class="empty muted">
+        No domains are bypassing the VPN. Everything goes through the tunnel.
+      </div>
+    } @else {
+      <mat-list>
+        @for (entry of store.domains(); track entry.domain) {
+          <mat-list-item class="entry">
+            <mat-icon matListItemIcon>dns</mat-icon>
+            <div matListItemTitle>{{ entry.domain }}</div>
+            <div matListItemLine class="addresses">
+              @if (entry.resolvedIps.length) {
+                @for (ip of entry.resolvedIps; track ip) {
+                  <span class="chip mono">{{ ip }}</span>
+                }
+              } @else {
+                <span class="muted">not resolved yet</span>
+              }
+            </div>
+            <button mat-icon-button matListItemMeta matTooltip="Remove" (click)="remove(entry)">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          </mat-list-item>
+        }
+      </mat-list>
+    }
+  </mat-card>
+</div>

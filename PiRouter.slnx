@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PiRouter.Api/PiRouter.Api.csproj" />
+    <Project Path="src/PiRouter.Core/PiRouter.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PiRouter.Core.Tests/PiRouter.Core.Tests.csproj" />
+  </Folder>
+</Solution>

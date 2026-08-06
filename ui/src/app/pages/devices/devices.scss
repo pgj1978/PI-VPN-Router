@@ -1,0 +1,38 @@
+.filter {
+  width: 100%;
+  max-width: 360px;
+  margin-bottom: 8px;
+}
+
+.name {
+  font: var(--mat-sys-body-medium);
+  white-space: nowrap;
+}
+
+.small {
+  font-size: 0.75rem;
+}
+
+tr.offline td {
+  opacity: 0.55;
+}
+
+.inline {
+  width: 150px;
+
+  // Inline editors inside a dense table need the default form-field padding removed.
+  ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+    display: none;
+  }
+}
+
+.empty {
+  padding: 32px;
+  text-align: center;
+}
+
+td.mat-mdc-cell,
+th.mat-mdc-header-cell {
+  padding: 8px 12px;
+  white-space: nowrap;
+}

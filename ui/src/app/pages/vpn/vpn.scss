@@ -1,0 +1,88 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.text .title {
+  font: var(--mat-sys-title-medium);
+}
+
+.text .detail {
+  font: var(--mat-sys-body-small);
+  max-width: 60ch;
+}
+
+.kill-switch,
+.add-form,
+.current {
+  margin-bottom: 16px;
+}
+
+.kill-switch mat-icon {
+  font-size: 28px;
+  width: 28px;
+  height: 28px;
+}
+
+.add-form .full {
+  width: 100%;
+}
+
+.counters {
+  display: flex;
+  gap: 14px;
+  font: var(--mat-sys-body-small);
+  flex-wrap: wrap;
+}
+
+.section {
+  font: var(--mat-sys-title-medium);
+  margin: 24px 0 12px;
+}
+
+.profile {
+  display: flex;
+  flex-direction: column;
+
+  &.active {
+    outline: 2px solid var(--mat-sys-primary);
+  }
+
+  mat-card-actions {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  mat-progress-bar {
+    margin: 12px 8px;
+  }
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.profile-head .name {
+  font: var(--mat-sys-title-small);
+  word-break: break-all;
+}
+
+.badge {
+  font: var(--mat-sys-label-small);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+.meta {
+  font-size: 0.8rem;
+  word-break: break-all;
+}

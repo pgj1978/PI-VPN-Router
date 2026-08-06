@@ -1,269 +1,112 @@
-# PiRouter - VPN Router Management System
+# PiRouter
 
-Transform your Raspberry Pi 5 into a powerful VPN router with web-based management.
+A Raspberry Pi that routes a LAN through a WireGuard VPN, with a web UI for managing it.
+Selected devices and domains can be sent straight out to the internet instead.
 
-## ✨ Latest: C# ASP.NET Core Backend
-
-The PiRouter backend is now available in **C#** using ASP.NET Core 8! Both Python and C# backends can run simultaneously.
-
-**→ [Read the C# Backend Guide](docs/START_HERE_CSHARP.md)**
-
-## Features
-
-- **Multiple VPN Servers**: Switch between different WireGuard VPN configurations
-- **Per-Device Control**: Choose which devices use the VPN and which bypass it
-- **Web Interface**: Modern Angular-based UI for easy management
-- **REST API**: C# ASP.NET Core OR Python FastAPI backend for programmatic control
-- **Docker Deployment**: Containerized for easy deployment and updates
-- **Dual Ethernet**: eth0 for LAN, eth1 (USB) for WAN
-
-## Quick Start
-
-### Deploy C# Backend (Recommended)
-
-```powershell
-# From Windows
-cd D:\PiRouter
-.\deploy-csharp.ps1 -TargetHost "pgj99@192.168.10.1"
+```
+      devices                      Pi                        internet
+    ┌──────────┐        ┌───────────────────────┐
+    │ laptop   │        │ eth1  192.168.20.1    │   wg0 ──► VPN provider ──►
+    │ phone    │───────►│       DHCP + DNS      │
+    │ tv       │        │ eth0 ─────────────────┼───────► upstream router ──►
+    └──────────┘        └───────────────────────┘         (bypassed traffic)
 ```
 
-### Or Deploy with Docker Compose (Both Backends)
+- **UI** — `http://192.168.20.1:4200`
+- **API** — `http://192.168.20.1:51508/api` (bound to LAN and loopback only)
+
+## What it does
+
+| | |
+|---|---|
+| VPN | Connect, switch and add WireGuard profiles. Reconnects on its own when a tunnel goes silent. |
+| Device bypass | Send a chosen device direct to the internet. Keyed on MAC, so it survives DHCP changes and reboots. |
+| Domain bypass | Send a chosen hostname direct. Re-resolved on a schedule, so it keeps working when addresses move. |
+| Kill switch | Blocks non-bypassed traffic from leaving via the WAN, whether or not the tunnel is up. |
+| Logs | Live tail in the UI, including every privileged command the router runs. |
+| Diagnostics | Named health checks with the fix for each, covering the failures this router has actually hit. |
+
+## Setup
+
+The Pi needs two network interfaces: one to the upstream router (WAN), one to your devices
+(LAN). Beyond that:
 
 ```bash
-# On Pi
-cd ~/code/PiRouter
-docker-compose up -d
+git clone <this repo> && cd PiRouter/deploy
+cp .env.example .env
+$EDITOR .env                  # interfaces and addressing live here, and nowhere else
+
+sudo ./install.sh --check     # report what it would change, touching nothing
+sudo ./install.sh             # do it
+docker compose up -d --build
 ```
 
-### Access the UI
-- Open browser to `http://192.168.10.1`
-- C# Backend: `http://192.168.10.1:51508`
-- Python Backend: `http://192.168.10.1:51507` (if running)
+`install.sh` is idempotent, so re-run it whenever. It handles only what a container
+genuinely cannot: the WireGuard kernel module, `ip_forward`, the LAN interface's static
+address, and clearing legacy persisted firewall rules. Everything else runs in Docker.
 
-## Documentation
+Drop WireGuard `.conf` files into `deploy/vpn_profiles/`, or paste them into the UI.
 
-All documentation has been organized in the `docs/` folder:
+### What still has to be true of the host
 
-- **[docs/START_HERE_CSHARP.md](docs/START_HERE_CSHARP.md)** - Start here! Quick overview
-- **[docs/CSHARP_QUICKSTART.md](docs/CSHARP_QUICKSTART.md)** - 5-minute deployment guide
-- **[docs/CSHARP_MIGRATION.md](docs/CSHARP_MIGRATION.md)** - Complete migration strategy
-- **[docs/CSHARP_FILE_INDEX.md](docs/CSHARP_FILE_INDEX.md)** - Code organization reference
-- **[docs/CSHARP_DEPLOYMENT_CHECKLIST.md](docs/CSHARP_DEPLOYMENT_CHECKLIST.md)** - Step-by-step deployment
-- **[docs/CSHARP_TEST_RESULTS.md](docs/CSHARP_TEST_RESULTS.md)** - Test verification results
-- **[PiRouterBackend/README.md](PiRouterBackend/README.md)** - C# backend architecture
+Being honest about the limits of "just Docker": a container cannot conjure a second network
+adapter, enable IP forwarding in the host kernel, or load a kernel module. Those are what
+`install.sh` exists for. Everything above that line is containerised, including dnsmasq.
 
-## Architecture
+## How it works
 
-### Network Setup
-```
-Internet → [Router 192.168.10.1] → eth1 (USB - WAN)
-                                      ↓
-                            [Raspberry Pi 5]
-                            VPN Router Logic
-                                      ↓
-                           eth0 (LAN - 192.168.100.1)
-                                      ↓
-                            Connected Devices
-```
-
-### Backend Options
-
-#### C# Backend (ASP.NET Core 8) - RECOMMENDED
-- Port: 51508
-- Location: `./PiRouterBackend/`
-- Features:
-  - Strong type safety
-  - Better performance
-  - Smaller container (~150MB)
-  - Can run alongside Python
-
-#### Python Backend (FastAPI) - Legacy
-- Port: 51507
-- Location: `./backend/`
-- Features:
-  - Dynamic typing
-  - Rapid development
-  - Can coexist with C# backend
-
-#### Frontend (Angular)
-- Port: 80
-- Location: `./frontend/`
-- Features:
-  - VPN server selection
-  - Device management
-  - Real-time status updates
-
-#### System Components
-- **WireGuard**: VPN client
-- **dnsmasq**: DHCP server for LAN
-- **iptables**: NAT and routing rules
-- **Docker**: Container runtime
-
-## API Endpoints (14 Total)
-
-### VPN Management (`/api/vpn`)
-- `GET /configs` - List configurations
-- `GET /status` - Current VPN status
-- `POST /connect/{name}` - Connect to VPN
-- `POST /disconnect` - Disconnect VPN
-- `POST /kill-switch?enabled=true` - Toggle kill switch
-- `POST /profile` - Add new profile
-- `DELETE /profile/{name}` - Delete profile
-
-### Device Management (`/api/devices`)
-- `GET /` - List connected devices
-- `POST /{mac}/bypass?bypass=true` - Set device bypass
-
-### Domain Management (`/api/domains`)
-- `GET /bypass` - List domain bypasses
-- `POST /bypass?domain=xxx` - Add domain bypass
-- `DELETE /bypass/{domain}` - Remove domain bypass
-
-### System (`/api/system`)
-- `GET /info` - Network and routing information
-
-## File Structure
+The important design decision is that **firewall state is compiled, not mutated**.
 
 ```
-PiRouter/
-├── docs/                         # Documentation (8 guides)
-├── PiRouterBackend/              # C# ASP.NET Core 8 backend
-│   ├── Models/
-│   ├── Services/
-│   ├── Controllers/
-│   ├── Dockerfile
-│   └── README.md
-├── backend/                      # Python FastAPI backend (legacy)
-├── frontend/                     # Angular web application
-├── wireguard_configs/            # VPN configuration files
-├── deploy-csharp.ps1            # C# deployment (Windows)
-├── deploy-csharp.sh             # C# deployment (Linux)
-├── docker-compose.yml           # Orchestration (both backends)
-└── README.md
+  config + live facts  ──►  RouterState  ──►  RuleCompiler  ──►  RuleSet
+      (intent)             (leases, tunnel,     (pure fn)         (rules)
+                            gateway, resolved                        │
+                            domains)                                 ▼
+                                                              flush + rebuild
+                                                             PIROUTER_* chains
+```
+
+- PiRouter creates four chains of its own and writes **only** inside them. Docker's chains
+  are untouched. `INPUT` is never touched at all, so there is no way to lock yourself out.
+- Every apply flushes those chains and rebuilds them from the compiled set. There is no
+  incremental add/delete path, which is why rules can no longer accumulate or go stale.
+- A reconciler re-checks every 15 seconds and repairs drift, so a DHCP lease change, a VPN
+  reconnect or a reboot cannot leave routing quietly wrong.
+- `RuleCompiler` is a pure function, so all of this is unit-tested without a Pi.
+
+Run the tests:
+
+```bash
+dotnet test
+```
+
+## Layout
+
+```
+src/PiRouter.Core/     domain, rule compiler, services
+src/PiRouter.Api/      controllers, SSE, DI
+tests/                 rule compiler and parsing tests
+ui/                    Angular 22 + Material
+deploy/                compose stack, install.sh, .env
 ```
 
 ## Configuration
 
-### Network Settings
-Edit `setup_pi_router.sh` to change:
-- LAN subnet (default: 192.168.100.0/24)
-- DHCP range (default: .50-.200)
-- DNS servers (default: 1.1.1.1, 8.8.8.8)
-
-### WireGuard Configs
-Place `.conf` files in `wireguard_configs/` directory.
-Each config should contain:
-```ini
-[Interface]
-PrivateKey = your_private_key
-Address = 10.x.x.x/32
-DNS = 1.1.1.1
-
-[Peer]
-PublicKey = server_public_key
-Endpoint = server.example.com:51820
-AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
-```
-
-## Management
-
-### Start/Stop Services
-```bash
-docker-compose up -d      # Start
-docker-compose down       # Stop
-docker-compose restart    # Restart
-docker-compose logs -f    # View logs
-```
-
-### Check VPN Status
-```bash
-sudo wg show              # WireGuard status
-ip route show             # Routing table
-sudo iptables -t nat -L   # NAT rules
-```
-
-### View Connected Devices
-```bash
-cat /var/lib/misc/dnsmasq.leases
-```
-
-## Deployment
-
-### Deploy C# Backend
-```powershell
-# From Windows
-.\deploy-csharp.ps1 -TargetHost "pgj99@192.168.10.1"
-```
-
-### Deploy Both Backends (Docker Compose)
-```bash
-# On Pi
-cd ~/code/PiRouter
-docker-compose up -d
-```
+Everything lives in `deploy/.env`. Nothing about the network is hardcoded in code, and the
+API additionally discovers the LAN address and upstream gateway at runtime, preferring what
+it finds over what it was told.
 
 ## Troubleshooting
 
-### VPN Not Connecting
-1. Check WireGuard config: `sudo cat /etc/wireguard/wg0.conf`
-2. Test manually: `sudo wg-quick up wg0`
-3. Check logs: `docker-compose logs backend-csharp`
+Start at **Diagnostics** in the UI. It checks IP forwarding, both interfaces, the upstream
+gateway, DNS resolution, this container's own resolver, the VPN endpoint's DNS, tunnel
+handshake age, the real exit address, dnsmasq, and firewall drift — each with the specific
+command that fixes it.
 
-### No Internet on Clients
-1. Verify IP forwarding: `cat /proc/sys/net/ipv4/ip_forward` (should be 1)
-2. Check NAT rules: `sudo iptables -t nat -L POSTROUTING -v`
-3. Verify eth1 has internet: `ping -I eth1 8.8.8.8`
+`install.sh` backs up firewall state to `/var/backups/pirouter/` before changing anything,
+so rolling back is:
 
-### Web Interface Not Loading
-1. Check frontend container: `docker-compose ps`
-2. View nginx logs: `docker-compose logs frontend`
-3. Verify port 80 is accessible: `netstat -tlnp | grep :80`
-
-### API Not Responding
-1. Check backend logs: `docker-compose logs backend-csharp`
-2. Test API: `curl http://localhost:51508/api/vpn/status`
-3. Verify permissions for network commands
-
-## Development
-
-### C# Backend Development
 ```bash
-cd PiRouterBackend
-dotnet run
-# Runs on http://localhost:5000
+docker compose down
+sudo iptables-restore < /var/backups/pirouter/live-rules.v4.<timestamp>
 ```
-
-### Python Backend Development
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0
-```
-
-### Frontend Development
-```bash
-cd frontend
-npm install
-ng serve --host 0.0.0.0
-```
-
-## Security Considerations
-
-1. **Change Default Password**: Update SSH password after setup
-2. **Firewall**: Consider restricting SSH access
-3. **HTTPS**: For production, add SSL/TLS
-4. **API Auth**: Currently no authentication - use on trusted networks only
-5. **WireGuard Keys**: Keep private keys secure (permissions 600)
-
-## Support
-
-For detailed deployment instructions, see the documentation in the `docs/` folder.
-
-For issues:
-- Check logs: `docker-compose logs`
-- Verify network: `ip addr show`
-- Test VPN: `sudo wg show`
-- Review iptables: `sudo iptables -L -v`

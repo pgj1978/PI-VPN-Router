@@ -1,0 +1,130 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>Devices</h1>
+      <p class="subtitle">
+        Turn bypass on to send a device straight to the internet instead of through the VPN.
+      </p>
+    </div>
+    <button mat-stroked-button (click)="store.refreshDevices()">
+      <mat-icon>refresh</mat-icon>
+      Refresh
+    </button>
+  </div>
+
+  <mat-form-field appearance="outline" class="filter">
+    <mat-label>Filter</mat-label>
+    <input matInput [ngModel]="filter()" (ngModelChange)="filter.set($event)" placeholder="name, IP or MAC" />
+    <mat-icon matSuffix>search</mat-icon>
+  </mat-form-field>
+
+  <mat-card>
+    <div class="scroll-x">
+      <table mat-table [dataSource]="filtered()">
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef aria-label="Online"></th>
+          <td mat-cell *matCellDef="let device">
+            <span
+              class="status-dot"
+              [class.status-connected]="device.online"
+              [class.status-disconnected]="!device.online"
+              [matTooltip]="device.online ? 'Online' : 'Offline'"></span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="name">
+          <th mat-header-cell *matHeaderCellDef>Name</th>
+          <td mat-cell *matCellDef="let device">
+            @if (editing() === device.mac) {
+              <mat-form-field appearance="outline" class="inline">
+                <input matInput [ngModel]="draftLabel()" (ngModelChange)="draftLabel.set($event)" placeholder="Label" />
+              </mat-form-field>
+            } @else {
+              <div class="name">{{ displayName(device) }}</div>
+              @if (device.label && device.hostname) {
+                <div class="muted small">{{ device.hostname }}</div>
+              }
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="ip">
+          <th mat-header-cell *matHeaderCellDef>Address</th>
+          <td mat-cell *matCellDef="let device" class="mono">{{ device.ip ?? '-' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="mac">
+          <th mat-header-cell *matHeaderCellDef>MAC</th>
+          <td mat-cell *matCellDef="let device" class="mono muted">{{ device.mac }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="reservation">
+          <th mat-header-cell *matHeaderCellDef>Reserved IP</th>
+          <td mat-cell *matCellDef="let device">
+            @if (editing() === device.mac) {
+              <mat-form-field appearance="outline" class="inline">
+                <input matInput [ngModel]="draftIp()" (ngModelChange)="draftIp.set($event)" placeholder="192.168.20.50" />
+              </mat-form-field>
+            } @else if (device.staticIp) {
+              <span class="mono">{{ device.staticIp }}</span>
+            } @else {
+              <span class="muted">-</span>
+            }
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="bypass">
+          <th mat-header-cell *matHeaderCellDef>Bypass VPN</th>
+          <td mat-cell *matCellDef="let device">
+            <mat-slide-toggle
+              [checked]="device.bypassVpn"
+              (change)="toggleBypass(device, $event.checked)"
+              [attr.aria-label]="'Bypass VPN for ' + displayName(device)" />
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef></th>
+          <td mat-cell *matCellDef="let device">
+            @if (editing() === device.mac) {
+              <button mat-icon-button matTooltip="Save" (click)="saveEdit(device)">
+                <mat-icon>check</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="Cancel" (click)="cancelEdit()">
+                <mat-icon>close</mat-icon>
+              </button>
+            } @else {
+              <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Device actions">
+                <mat-icon>more_vert</mat-icon>
+              </button>
+              <mat-menu #menu="matMenu">
+                <button mat-menu-item (click)="startEdit(device)">
+                  <mat-icon>edit</mat-icon>
+                  <span>Rename / reserve IP</span>
+                </button>
+                <button mat-menu-item (click)="forget(device)">
+                  <mat-icon>delete_outline</mat-icon>
+                  <span>Forget device</span>
+                </button>
+              </mat-menu>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns" [class.offline]="!row.online"></tr>
+      </table>
+    </div>
+
+    @if (filtered().length === 0) {
+      <div class="empty muted">
+        @if (store.devices().length === 0) {
+          No devices have requested an address yet.
+        } @else {
+          Nothing matches "{{ filter() }}".
+        }
+      </div>
+    }
+  </mat-card>
+</div>

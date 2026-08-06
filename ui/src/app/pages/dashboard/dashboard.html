@@ -1,0 +1,121 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="subtitle">Overview of the router and tunnel</p>
+    </div>
+  </div>
+
+  <mat-card class="hero" [class]="'hero-' + store.connectionState()">
+    <mat-card-content>
+      <div class="hero-row">
+        <mat-icon class="hero-icon">
+          {{ store.connected() ? (store.healthy() ? 'shield' : 'gpp_maybe') : 'gpp_bad' }}
+        </mat-icon>
+        <div class="hero-text">
+          <div class="hero-title">{{ statusHeadline() }}</div>
+          <div class="hero-detail">{{ statusDetail() }}</div>
+        </div>
+        <span class="spacer"></span>
+        <a mat-flat-button routerLink="/vpn">Manage VPN</a>
+      </div>
+
+      @if (store.vpnStatus(); as status) {
+        @if (status.connected) {
+          <div class="hero-stats">
+            <div>
+              <span class="label">Endpoint</span>
+              <span class="value mono">{{ status.endpoint ?? '-' }}</span>
+            </div>
+            <div>
+              <span class="label">Last handshake</span>
+              <span class="value">{{ formatAge(status.handshakeAgeSeconds) }}</span>
+            </div>
+            <div>
+              <span class="label">Received</span>
+              <span class="value">{{ formatBytes(status.bytesReceived) }}</span>
+            </div>
+            <div>
+              <span class="label">Sent</span>
+              <span class="value">{{ formatBytes(status.bytesSent) }}</span>
+            </div>
+          </div>
+        }
+      } @else {
+        <mat-progress-bar mode="indeterminate" />
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <div class="card-grid stats">
+    <mat-card>
+      <mat-card-content>
+        <div class="stat-value">{{ store.onlineDevices() }}</div>
+        <div class="stat-label">Devices online</div>
+        <a mat-button routerLink="/devices">View devices</a>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <div class="stat-value">{{ store.bypassedDevices() }}</div>
+        <div class="stat-label">Devices bypassing the VPN</div>
+        <a mat-button routerLink="/devices">Change</a>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <div class="stat-value">{{ store.domains().length }}</div>
+        <div class="stat-label">Domains bypassing the VPN</div>
+        <a mat-button routerLink="/domains">Change</a>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-content>
+        <div class="stat-value" [class.status-fail]="!store.killSwitch()" [class.status-pass]="store.killSwitch()">
+          {{ store.killSwitch() ? 'On' : 'Off' }}
+        </div>
+        <div class="stat-label">Kill switch</div>
+        <a mat-button routerLink="/vpn">Change</a>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  @if (store.systemInfo(); as info) {
+    <mat-card class="network">
+      <mat-card-header>
+        <mat-card-title>Network</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <dl>
+          <div>
+            <dt>LAN</dt>
+            <dd class="mono">{{ info.lanAddress ?? 'not configured' }} on {{ info.lanInterface }}</dd>
+          </div>
+          <div>
+            <dt>WAN</dt>
+            <dd class="mono">{{ info.wanAddress ?? 'not configured' }} on {{ info.wanInterface }}</dd>
+          </div>
+          <div>
+            <dt>Gateway</dt>
+            <dd class="mono">{{ info.wanGateway ?? 'unknown' }}</dd>
+          </div>
+          <div>
+            <dt>IP forwarding</dt>
+            <dd [class.status-pass]="info.ipForwarding" [class.status-fail]="!info.ipForwarding">
+              {{ info.ipForwarding ? 'enabled' : 'disabled' }}
+            </dd>
+          </div>
+          <div>
+            <dt>DHCP / DNS</dt>
+            <dd [class.status-pass]="info.dnsmasqRunning" [class.status-fail]="!info.dnsmasqRunning">
+              {{ info.dnsmasqRunning ? 'running' : 'stopped' }}
+            </dd>
+          </div>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

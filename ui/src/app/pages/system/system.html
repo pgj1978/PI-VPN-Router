@@ -1,0 +1,129 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>System</h1>
+      <p class="subtitle">DHCP, firewall state and router control</p>
+    </div>
+  </div>
+
+  <!-- DHCP -->
+  <mat-card class="section">
+    <mat-card-header>
+      <mat-card-title>DHCP</mat-card-title>
+      <mat-card-subtitle>Addresses handed out to devices on the LAN</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <mat-slide-toggle [checked]="enabled()" (change)="enabled.set($event.checked)" class="toggle">
+        Serve DHCP on this network
+      </mat-slide-toggle>
+
+      @if (enabled()) {
+        <div class="fields">
+          <mat-form-field appearance="outline">
+            <mat-label>Range start</mat-label>
+            <input matInput class="mono" [ngModel]="rangeStart()" (ngModelChange)="rangeStart.set($event)" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Range end</mat-label>
+            <input matInput class="mono" [ngModel]="rangeEnd()" (ngModelChange)="rangeEnd.set($event)" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Lease time</mat-label>
+            <input matInput [ngModel]="leaseTime()" (ngModelChange)="leaseTime.set($event)" placeholder="12h" />
+          </mat-form-field>
+        </div>
+      }
+    </mat-card-content>
+    <mat-card-actions align="end">
+      <button mat-button (click)="loadDhcp()">Reset</button>
+      <button mat-flat-button (click)="saveDhcp()" [disabled]="saving()">Save</button>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- firewall -->
+  <mat-card class="section">
+    <mat-card-header>
+      <mat-card-title>Firewall state</mat-card-title>
+      <mat-card-subtitle>
+        The rules PiRouter owns. They are rebuilt from scratch on every change, so they cannot
+        accumulate or drift.
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      @if (rules(); as preview) {
+        <div class="rule-status">
+          <span
+            class="status-dot"
+            [class.status-connected]="preview.inSync"
+            [class.status-degraded]="!preview.inSync"></span>
+          <span>
+            {{ preview.inSync ? 'Live rules match the desired state' : 'Live rules have drifted' }}
+          </span>
+          <span class="muted mono">#{{ preview.fingerprint }}</span>
+        </div>
+
+        @if (!preview.inSync) {
+          <div class="drift">
+            @if (preview.missingChains.length) {
+              <div class="drift-group">
+                <strong>Missing chains</strong>
+                @for (c of preview.missingChains; track c) {
+                  <div class="mono">{{ c }}</div>
+                }
+              </div>
+            }
+            @if (preview.missing.length) {
+              <div class="drift-group">
+                <strong>Missing rules</strong>
+                @for (r of preview.missing; track r) {
+                  <div class="mono">{{ r }}</div>
+                }
+              </div>
+            }
+            @if (preview.unexpected.length) {
+              <div class="drift-group">
+                <strong>Unexpected rules</strong>
+                @for (r of preview.unexpected; track r) {
+                  <div class="mono">{{ r }}</div>
+                }
+              </div>
+            }
+          </div>
+        }
+
+        <mat-expansion-panel class="rules-panel">
+          <mat-expansion-panel-header>
+            <mat-panel-title>Compiled rules ({{ preview.rules.length }})</mat-panel-title>
+          </mat-expansion-panel-header>
+          <div class="scroll-x">
+            <pre class="mono rules">{{ preview.rules.join('\n') }}</pre>
+          </div>
+        </mat-expansion-panel>
+      }
+    </mat-card-content>
+
+    <mat-card-actions align="end">
+      <button mat-button (click)="loadRules()">Refresh</button>
+      <button mat-flat-button (click)="reconcile()">Reapply now</button>
+    </mat-card-actions>
+  </mat-card>
+
+  <!-- danger zone -->
+  <mat-card class="section danger">
+    <mat-card-header>
+      <mat-card-title>Reboot</mat-card-title>
+      <mat-card-subtitle>Restarts the whole Raspberry Pi</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content class="muted">
+      Everything on the LAN loses connectivity for roughly a minute. The tunnel and all bypass
+      settings are restored automatically on the way back up.
+    </mat-card-content>
+    <mat-card-actions align="end">
+      <button mat-stroked-button color="warn" (click)="reboot()">
+        <mat-icon>restart_alt</mat-icon>
+        Reboot router
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>

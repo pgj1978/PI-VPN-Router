@@ -1,0 +1,51 @@
+# Rendered by the nginx image's built-in envsubst at container start.
+# ${LAN_IP} and ${UI_PORT} come from deploy/.env.
+
+server {
+    # Bound to the LAN address specifically, not 0.0.0.0. This container runs on the host
+    # network so that it can reach the API on loopback, which would otherwise expose the UI
+    # on the WAN interface as well.
+    listen ${LAN_IP}:${UI_PORT};
+    listen 127.0.0.1:${UI_PORT};
+
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Angular owns client-side routing, so unknown paths fall through to the shell.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Hashed build artefacts are immutable. index.html must never be cached, or a deploy
+    # leaves browsers asking for chunks that no longer exist.
+    location ~* \.(js|css|woff2?|ico|png|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-store";
+    }
+
+    # The API also runs on the host network, so loopback reaches it. The previous config
+    # proxied to a hardcoded docker bridge address (172.25.0.1) that does not exist on this
+    # machine, so the proxy never worked — the old UI only functioned because it bypassed
+    # nginx entirely and called port 51508 direct, which forced the API to be public.
+    location /api/ {
+        proxy_pass http://127.0.0.1:${API_PORT};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Server-sent events for the live log tail: buffering off or entries arrive in
+        # batches, and the connection has to be allowed to stay open.
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 24h;
+        chunked_transfer_encoding off;
+    }
+}

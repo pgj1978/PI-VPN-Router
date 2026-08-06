@@ -1,0 +1,126 @@
+@use '@angular/material' as mat;
+
+
+// Angular Material 22 theming. One theme block drives both light and dark: the system
+// tokens resolve against the active colour-scheme, so there is no second theme to keep
+// in sync the way a hand-rolled dark mode would need.
+html {
+  color-scheme: light dark;
+
+  @include mat.theme((
+    color: (
+      primary: mat.$azure-palette,
+      tertiary: mat.$cyan-palette,
+    ),
+    typography: Roboto,
+    density: 0,
+  ));
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font-family: Roboto, 'Helvetica Neue', sans-serif;
+}
+
+// ---------------------------------------------------------------- shared layout
+
+.page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+
+  h1 {
+    margin: 0;
+    font: var(--mat-sys-headline-small);
+  }
+
+  .subtitle {
+    margin: 4px 0 0;
+    color: var(--mat-sys-on-surface-variant);
+    font: var(--mat-sys-body-small);
+  }
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.mono {
+  font-family: 'Cascadia Code', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+// Wide content scrolls inside its own container. The page body never scrolls sideways.
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+// ---------------------------------------------------------------- status colours
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.status-connected { background: #16a34a; }
+.status-degraded { background: #d97706; }
+.status-disconnected { background: #dc2626; }
+
+.status-pass { color: #16a34a; }
+.status-warn { color: #d97706; }
+.status-fail { color: #dc2626; }
+
+.snack-ok {
+  --mdc-snackbar-container-color: #14532d;
+  --mdc-snackbar-supporting-text-color: #dcfce7;
+  --mat-snack-bar-button-color: #86efac;
+}
+
+.snack-error {
+  --mdc-snackbar-container-color: #7f1d1d;
+  --mdc-snackbar-supporting-text-color: #fee2e2;
+  --mat-snack-bar-button-color: #fca5a5;
+}
+
+// ---------------------------------------------------------------- tables
+
+table.mat-mdc-table {
+  width: 100%;
+  background: transparent;
+}
+
+@media (max-width: 599px) {
+  .page {
+    padding: 12px;
+  }
+}

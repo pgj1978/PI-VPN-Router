@@ -1,0 +1,39 @@
+.add {
+  margin-bottom: 16px;
+}
+
+.add-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1 1 260px;
+}
+
+.entry {
+  height: auto !important;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.addresses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--mat-sys-surface-container-highest);
+  font-size: 0.75rem;
+}
+
+.empty {
+  padding: 32px;
+  text-align: center;
+}

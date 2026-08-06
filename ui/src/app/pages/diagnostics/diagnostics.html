@@ -1,0 +1,60 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>Diagnostics</h1>
+      <p class="subtitle">
+        Checks covering the failures this router has actually hit, with the fix for each.
+      </p>
+    </div>
+    <button mat-flat-button (click)="run()" [disabled]="running()">
+      <mat-icon>play_arrow</mat-icon>
+      Run checks
+    </button>
+  </div>
+
+  @if (running() && !report()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  @if (report(); as result) {
+    <mat-card class="summary" [class]="'summary-' + result.overall">
+      <mat-card-content class="summary-row">
+        <mat-icon class="summary-icon" [class]="'status-' + result.overall">
+          {{ icon(result.overall) }}
+        </mat-icon>
+        <div>
+          <div class="summary-title">{{ headline(result.overall) }}</div>
+          <div class="muted">
+            {{ summary().pass }} passed &middot; {{ summary().warn }} warnings &middot; {{ summary().fail }} failed
+          </div>
+        </div>
+        <span class="spacer"></span>
+        @if (running()) {
+          <mat-progress-bar mode="indeterminate" class="inline-progress" />
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <div class="checks">
+      @for (check of result.checks; track check.id) {
+        <mat-card class="check" [class]="'check-' + check.status">
+          <mat-card-content>
+            <div class="check-row">
+              <mat-icon [class]="'status-' + check.status">{{ icon(check.status) }}</mat-icon>
+              <div class="check-body">
+                <div class="check-name">{{ check.name }}</div>
+                <div class="check-detail">{{ check.detail }}</div>
+                @if (check.remediation) {
+                  <div class="remediation">
+                    <mat-icon class="fix-icon">build</mat-icon>
+                    <span class="mono">{{ check.remediation }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      }
+    </div>
+  }
+</div>

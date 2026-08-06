@@ -1,0 +1,55 @@
+<mat-sidenav-container class="shell">
+  <mat-sidenav
+    class="drawer"
+    [mode]="drawerMode()"
+    [opened]="drawerOpen()"
+    (openedChange)="drawerOpen.set($event)">
+
+    <div class="brand">
+      <mat-icon class="brand-icon">router</mat-icon>
+      <div>
+        <div class="brand-name">PiRouter</div>
+        <div class="brand-sub muted">VPN gateway</div>
+      </div>
+    </div>
+
+    <mat-nav-list>
+      @for (item of nav; track item.path) {
+        <a
+          mat-list-item
+          [routerLink]="item.path"
+          routerLinkActive
+          #active="routerLinkActive"
+          [activated]="active.isActive"
+          (click)="onNavigate()">
+          <mat-icon matListItemIcon>{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <mat-toolbar class="topbar">
+      <button mat-icon-button (click)="toggleDrawer()" aria-label="Toggle navigation">
+        <mat-icon>menu</mat-icon>
+      </button>
+
+      <span class="spacer"></span>
+
+      <div class="status" [matTooltip]="statusLabel()">
+        <span class="status-dot" [class]="'status-' + store.connectionState()"></span>
+        <span class="status-text">{{ store.vpnStatus()?.profile ?? 'No profile' }}</span>
+      </div>
+    </mat-toolbar>
+
+    @if (store.lastError()) {
+      <div class="offline-banner">
+        <mat-icon>cloud_off</mat-icon>
+        <span>{{ store.lastError() }}</span>
+      </div>
+    }
+
+    <router-outlet />
+  </mat-sidenav-content>
+</mat-sidenav-container>

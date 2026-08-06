@@ -1,0 +1,138 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1>VPN</h1>
+      <p class="subtitle">WireGuard profiles and the kill switch</p>
+    </div>
+    <button mat-stroked-button (click)="showAddForm.set(!showAddForm())">
+      <mat-icon>{{ showAddForm() ? 'close' : 'add' }}</mat-icon>
+      {{ showAddForm() ? 'Cancel' : 'Add profile' }}
+    </button>
+  </div>
+
+  <!-- kill switch -->
+  <mat-card class="kill-switch">
+    <mat-card-content>
+      <div class="row">
+        <mat-icon [class.status-pass]="store.killSwitch()">security</mat-icon>
+        <div class="text">
+          <div class="title">Kill switch</div>
+          <div class="detail muted">
+            Blocks devices from reaching the internet unless their traffic goes through the tunnel.
+            Devices and domains you have set to bypass are unaffected.
+          </div>
+        </div>
+        <mat-slide-toggle
+          [checked]="store.killSwitch()"
+          (change)="toggleKillSwitch($event.checked)"
+          aria-label="Kill switch" />
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- add profile -->
+  @if (showAddForm()) {
+    <mat-card class="add-form">
+      <mat-card-header><mat-card-title>Add a WireGuard profile</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Profile name</mat-label>
+          <input matInput [ngModel]="newName()" (ngModelChange)="newName.set($event)" placeholder="wg-london-st006" />
+          <mat-hint>Letters, digits, dots, dashes and underscores</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full">
+          <mat-label>Configuration</mat-label>
+          <textarea
+            matInput
+            rows="10"
+            class="mono"
+            [ngModel]="newConfig()"
+            (ngModelChange)="newConfig.set($event)"
+            placeholder="[Interface]&#10;PrivateKey = ...&#10;Address = 10.14.0.2/16&#10;&#10;[Peer]&#10;PublicKey = ...&#10;Endpoint = ...:51820"></textarea>
+        </mat-form-field>
+      </mat-card-content>
+      <mat-card-actions align="end">
+        <button mat-button (click)="showAddForm.set(false)">Cancel</button>
+        <button mat-flat-button [disabled]="!newName().trim() || !newConfig().trim()" (click)="addProfile()">
+          Save profile
+        </button>
+      </mat-card-actions>
+    </mat-card>
+  }
+
+  <!-- current connection -->
+  @if (store.vpnStatus(); as status) {
+    @if (status.connected) {
+      <mat-card class="current">
+        <mat-card-content>
+          <div class="row">
+            <span class="status-dot" [class]="'status-' + store.connectionState()"></span>
+            <div class="text">
+              <div class="title">{{ status.profile ?? 'Connected' }}</div>
+              <div class="detail muted mono">{{ status.endpoint }}</div>
+            </div>
+            <span class="spacer"></span>
+            <div class="counters muted">
+              <span>&#8595; {{ formatBytes(status.bytesReceived) }}</span>
+              <span>&#8593; {{ formatBytes(status.bytesSent) }}</span>
+              <span>handshake {{ formatAge(status.handshakeAgeSeconds) }}</span>
+            </div>
+            <button mat-stroked-button color="warn" (click)="disconnect()" [disabled]="connecting() !== null">
+              Disconnect
+            </button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    }
+  }
+
+  <!-- profiles -->
+  <h2 class="section">Profiles</h2>
+
+  @if (store.profiles().length === 0) {
+    <mat-card><mat-card-content class="muted">
+      No profiles yet. Add a WireGuard configuration to get started.
+    </mat-card-content></mat-card>
+  }
+
+  <div class="card-grid">
+    @for (profile of store.profiles(); track profile.name) {
+      <mat-card class="profile" [class.active]="profile.active">
+        <mat-card-content>
+          <div class="profile-head">
+            <span class="name">{{ profile.name }}</span>
+            @if (profile.active) {
+              <span class="badge">Active</span>
+            }
+          </div>
+
+          <div class="meta muted mono">{{ profile.endpoint ?? 'no endpoint' }}</div>
+          @if (profile.mtu) {
+            <div class="meta muted">MTU {{ profile.mtu }}</div>
+          }
+        </mat-card-content>
+
+        <mat-card-actions>
+          @if (connecting() === profile.name) {
+            <mat-progress-bar mode="indeterminate" />
+          } @else {
+            <button
+              mat-flat-button
+              [disabled]="profile.active || connecting() !== null"
+              (click)="connect(profile)">
+              {{ profile.active ? 'Connected' : 'Connect' }}
+            </button>
+            <button
+              mat-icon-button
+              matTooltip="Delete profile"
+              [disabled]="profile.active"
+              (click)="remove(profile)">
+              <mat-icon>delete_outline</mat-icon>
+            </button>
+          }
+        </mat-card-actions>
+      </mat-card>
+    }
+  </div>
+</div>
